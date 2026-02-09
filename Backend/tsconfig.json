@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    /* RUTAS DE SALIDA Y ENTRADA */
+    "outDir": "./dist",
+    "rootDir": "./src",
+    
+    /* COMPATIBILIDAD Y MOTORES */
+    "target": "ES2020",             // Un estándar moderno pero muy estable para Node 16+
+    "module": "commonjs",           // <--- ESTO ES CLAVE para evitar errores de importación
+    "lib": ["es6", "dom"],          // Incluye librerías base necesarias
+    
+    /* REGLAS ESTRICTAS */
+    "strict": true,                 // Te obliga a escribir buen código
+    "esModuleInterop": true,        // Permite compatibilidad entre módulos viejos y nuevos
+    "skipLibCheck": true,           // Acelera la compilación ignorando errores en librerías ajenas
+    
+    /* DECORADORES (OBLIGATORIO PARA SEQUELIZE-TYPESCRIPT) */
+    "experimentalDecorators": true, // <--- SIN ESTO, SEQUELIZE NO FUNCIONA
+    "emitDecoratorMetadata": true,  // <--- SIN ESTO, SEQUELIZE NO FUNCIONA
+    
+    /* EXTRAS */
+    "resolveJsonModule": true,      // Te deja importar archivos .json si lo necesitas
+    "sourceMap": true               // Ayuda a depurar errores indicando la línea en el archivo TS original
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
