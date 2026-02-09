@@ -48,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                 { name: 'Analítica', href: `${basePath}/analitica`, icon: BarChart3 },
                 { name: 'Auditoría de Datos', href: `${basePath}/auditoria`, icon: ClipboardCheck },
                 { name: 'Configuración CUPS', href: `${basePath}/configcups`, icon: Library },
-                // { name: 'Ajustes', href: `${basePath}/config`, icon: Settings }, // Opcional si quieres mantenerlo
+                { name: 'Ajustes', href: `${basePath}/config`, icon: Settings }, // Opcional si quieres mantenerlo
             ]
         },
     ], [basePath]);

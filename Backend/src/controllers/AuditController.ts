@@ -6,10 +6,8 @@ import { sequelize } from '../config/db';
 
 export class AuditController {
 
-    // =================================================================
-    // 1. OBTENER ESTADÍSTICAS (Lectura)
-    // =================================================================
-    static getGeneralStats = async (req: Request, res: Response) => {
+        // 1. OBTENER ESTADÍSTICAS (Lectura)
+        static getGeneralStats = async (req: Request, res: Response) => {
         const response = {
             stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
             duplicates: [] as any[]
@@ -82,10 +80,8 @@ export class AuditController {
         }
     }
 
-    // =================================================================
-    // 2. CORREGIR FECHAS (Acción)
-    // =================================================================
-    static fixIncoherentDates = async (req: Request, res: Response) => {
+        // 2. CORREGIR FECHAS (Acción)
+        static fixIncoherentDates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             const tableName = FollowUp.getTableName();
@@ -110,10 +106,8 @@ export class AuditController {
         }
     }
 
-    // =================================================================
-    // 3. FUSIÓN DE DUPLICADOS (Acción)
-    // =================================================================
-    static mergeDuplicates = async (req: Request, res: Response) => {
+        // 3. FUSIÓN DE DUPLICADOS (Acción)
+        static mergeDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             console.log("🧬 [MERGE] Iniciando fusión...");
@@ -186,10 +180,8 @@ export class AuditController {
         }
     }
     
-    // =================================================================
-    // 4. LIMPIEZA DE DUPLICADOS (Acción Destructiva)
-    // =================================================================
-    static cleanDuplicates = async (req: Request, res: Response) => {
+        // 4. LIMPIEZA DE DUPLICADOS (Acción Destructiva)
+        static cleanDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             const tableName = FollowUp.getTableName();

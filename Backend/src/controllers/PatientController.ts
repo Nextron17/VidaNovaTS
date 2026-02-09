@@ -8,9 +8,7 @@ import { CupsController } from './CupsController';
 
 export class PatientController {
 
-    // =================================================================
     // 1. IMPORTACIÓN MASIVA (EXCEL/CSV)
-    // =================================================================
     static importPatients = async (req: Request, res: Response) => {
         try {
             if (!req.file) return res.status(400).json({ error: 'Falta archivo para procesar.' });
@@ -28,9 +26,7 @@ export class PatientController {
         }
     }
 
-    // =================================================================
     // 2. LISTAR PACIENTES (Filtros Múltiples + Estadísticas)
-    // =================================================================
     static getPatients = async (req: Request, res: Response) => {
         try {
             const { 
@@ -67,7 +63,6 @@ export class PatientController {
                 as: 'followups',
                 required: false,
                 order: [['dateRequest', 'DESC']], 
-                // limit: 1  <--- 🔥 ELIMINADO: Ahora trae TODO el historial, no solo el último.
             }];
 
             const followUpWhere: any = {};
@@ -138,9 +133,7 @@ export class PatientController {
         }
     }
 
-    // =================================================================
     // 3. GESTIÓN MASIVA (BULK UPDATE)
-    // =================================================================
     static bulkUpdate = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
@@ -170,9 +163,7 @@ export class PatientController {
         }
     }
 
-    // =================================================================
     // 4. MAESTRO DE CUPS
-    // =================================================================
     static getCups = async (req: Request, res: Response) => {
         try {
             const cups = await FollowUp.findAll({
@@ -236,23 +227,21 @@ export class PatientController {
     }
 
     static syncCups = async (req: Request, res: Response) => {
-        // Ejecutamos la auto-categorización del controlador de CUPS
         await CupsController.runAutoCategorization();
         res.json({ success: true, newFound: 0, message: "Sincronizado." });
     }
 
-    // =================================================================
     // 5. DETALLES Y CRUD
-    // =================================================================
     static getPatientById = async (req: Request, res: Response) => {
         try {
-            const { id } = req.params;
-            const patient = await Patient.findByPk(id as string, {
+            // 🔥 CORRECCIÓN: String()
+            const id = String(req.params.id);
+            const patient = await Patient.findByPk(id, {
                 include: [{ model: FollowUp, as: 'followups' }],
                 order: [[{ model: FollowUp, as: 'followups' }, 'dateRequest', 'DESC']]
             });
             if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
-            res.json({ success: true, data: patient }); // 🔥 Aseguramos estructura correcta
+            res.json({ success: true, data: patient }); 
         } catch (error) {
             res.status(500).json({ success: false });
         }
@@ -269,21 +258,57 @@ export class PatientController {
         }
     }
 
+    // 6. ACTUALIZAR PACIENTE (CORREGIDO Y BLINDADO)
+    static updatePatient = async (req: Request, res: Response) => {
+        const t = await sequelize.transaction();
+        try {
+            // 🔥 CORRECCIÓN: Forzamos String() para evitar error 'string | string[]'
+            const id = String(req.params.id); 
+            const data = req.body;
+
+            const patient = await Patient.findByPk(id);
+            
+            if (!patient) {
+                await t.rollback();
+                return res.status(404).json({ success: false, message: "Paciente no encontrado en BD." });
+            }
+
+            await patient.update(data, { transaction: t });
+
+            await t.commit();
+
+            return res.json({ 
+                success: true, 
+                message: "Paciente actualizado correctamente.",
+                data: patient 
+            });
+
+        } catch (error: any) {
+            await t.rollback();
+            console.error("Error actualizando paciente:", error);
+            return res.status(500).json({ 
+                success: false, 
+                message: "Error interno al actualizar.",
+                error: error.message 
+            });
+        }
+    }
+
+    // 7. ELIMINAR PACIENTE (CORREGIDO)
     static deletePatient = async (req: Request, res: Response) => {
         try {
-            await Patient.destroy({ where: { id: req.params.id as string } }); // 🔥 Corrección tipo
+            // 🔥 CORRECCIÓN: String()
+            const id = String(req.params.id);
+            await Patient.destroy({ where: { id: id } }); 
             res.json({ success: true, message: 'Eliminado' });
         } catch (error) {
             res.status(500).json({ success: false });
         }
     }
 
-    // =================================================================
-    // 8. AUDITORÍA BLINDADA (TABLA DINÁMICA)
-    // =================================================================
+    // 8. AUDITORÍA BLINDADA
     static getAuditStats = async (req: Request, res: Response) => {
         
-        // Estructura segura
         const response = {
             stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
             duplicates: [] as any[]
@@ -292,7 +317,6 @@ export class PatientController {
         try {
             console.log("🔍 [AUDIT] Iniciando diagnóstico...");
 
-            // 1. KPIs BÁSICOS
             const [totalRecords, totalPatients] = await Promise.all([
                 FollowUp.count(),
                 Patient.count()
@@ -309,7 +333,6 @@ export class PatientController {
 
             response.stats = { total: totalRecords, pacientes: totalPatients, sin_eps: sinEps, sin_cups: sinCups, fechas_malas: fechasMalas };
 
-            // 2. DETECCIÓN DE DUPLICADOS (SQL DINÁMICO)
             try {
                 const tableName = FollowUp.getTableName(); 
                 const rawQuery = `
@@ -362,9 +385,7 @@ export class PatientController {
         }
     }
 
-    // =================================================================
-    // 9. HERRAMIENTA: ELIMINAR DUPLICADOS AUTOMÁTICAMENTE
-    // =================================================================
+    // 9. HERRAMIENTA: ELIMINAR DUPLICADOS
     static cleanDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
