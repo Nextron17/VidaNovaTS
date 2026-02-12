@@ -35,62 +35,79 @@ export class PatientController {
                 search = '', 
                 eps = '', 
                 status = '', 
-                cohorte = '',
+                cohorte = '', 
                 startDate,
                 endDate
             } = req.query;
             
+            // Log para verificar que el filtro llega al servidor
+            console.log("🔍 FILTRO RECIBIDO:", { cohorte, status }); 
+
             const offset = (Number(page) - 1) * Number(limit);
             
-            // Filtros Paciente
-            const whereClause: any = {};
+            // --- A. Filtros del PACIENTE ---
+            const patientWhere: any = {};
 
             if (eps && eps !== 'TODAS') {
-                whereClause.insurance = { [Op.iLike]: `%${eps}%` };
+                patientWhere.insurance = { [Op.like]: `%${eps}%` };
             }
 
             if (search) {
-                whereClause[Op.or] = [
-                    { documentNumber: { [Op.iLike]: `%${search}%` } },
-                    { firstName: { [Op.iLike]: `%${search}%` } },
-                    { lastName: { [Op.iLike]: `%${search}%` } }
+                patientWhere[Op.or] = [
+                    { documentNumber: { [Op.like]: `%${search}%` } },
+                    { firstName: { [Op.like]: `%${search}%` } },
+                    { lastName: { [Op.like]: `%${search}%` } }
                 ];
             }
 
-            // Filtros Seguimiento
-            const includeOptions: any[] = [{
-                model: FollowUp,
-                as: 'followups',
-                required: false,
-                order: [['dateRequest', 'DESC']], 
-            }];
-
+            // --- B. Filtros del SEGUIMIENTO (FollowUp) ---
             const followUpWhere: any = {};
+            let hasFollowUpFilters = false; // Bandera manual para evitar el error de Object.keys
 
+            // 1. Estado
             if (status && status !== 'TODOS') {
                 followUpWhere.status = status;
-                includeOptions[0].required = true; 
+                hasFollowUpFilters = true;
             }
 
-            if (cohorte) {
-                const cohorteList = (cohorte as string).split(',');
-                followUpWhere.category = { [Op.in]: cohorteList };
-                includeOptions[0].required = true;
-            }
-
+            // 2. Fechas
             if (startDate && endDate) {
                 followUpWhere.dateRequest = {
                     [Op.between]: [new Date(startDate as string), new Date(endDate as string)]
                 };
-                includeOptions[0].required = true;
+                hasFollowUpFilters = true;
             }
 
-            if (Object.keys(followUpWhere).length > 0) {
-                includeOptions[0].where = followUpWhere;
+            // 3. Modalidad / Cohorte (El filtro problemático)
+            if (cohorte) {
+                const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
+                
+                if (filtrosList.length > 0) {
+                    followUpWhere[Op.or] = filtrosList.map(filtro => ({
+                        [Op.or]: [
+                            // Busca en Categoría (ej: "Imagenología")
+                            { category: { [Op.like]: `%${filtro}%` } },
+                            // Busca en Observación (ej: "1= CAC Mama")
+                            { observation: { [Op.like]: `%${filtro}%` } }
+                        ]
+                    }));
+                    hasFollowUpFilters = true;
+                }
             }
 
+            // Configuración del JOIN
+            const includeOptions: any[] = [{
+                model: FollowUp,
+                as: 'followups',
+                required: hasFollowUpFilters, // Si hay filtros, es INNER JOIN (estricto)
+                // Si hay filtros, asignamos el WHERE. Si no, lo dejamos undefined.
+                where: hasFollowUpFilters ? followUpWhere : undefined,
+                order: [['dateRequest', 'DESC']]
+            }];
+
+            // --- C. Ejecutar Consulta ---
             const { count, rows } = await Patient.findAndCountAll({
-                where: whereClause,
+                where: patientWhere,
                 include: includeOptions,
                 distinct: true,
                 limit: Number(limit),
@@ -98,7 +115,14 @@ export class PatientController {
                 order: [['updatedAt', 'DESC']]
             });
 
-            // Stats
+            // Reordenar followups en memoria para que el [0] sea siempre el más reciente
+            rows.forEach((p: any) => {
+                if (p.followups && p.followups.length > 0) {
+                    p.followups.sort((a: any, b: any) => new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime());
+                }
+            });
+
+            // --- D. Estadísticas ---
             const stats = {
                 total: await Patient.count(),
                 pendientes: await FollowUp.count({ where: { status: 'PENDIENTE' } }),

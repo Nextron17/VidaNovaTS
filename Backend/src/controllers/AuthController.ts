@@ -1,26 +1,33 @@
 import { Request, Response } from 'express';
 import { User } from '../models/User';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto'; // Para generar token de recuperación
-import { sendEmail } from '../utils/mailer'; // Asegúrate de tener este archivo creado
+import crypto from 'crypto';
+import { sendEmail } from '../utils/mailer';
 
 export class AuthController {
 
-    // --- INICIAR SESIÓN ---
+    // --- INICIAR SESIÓN (USANDO CC) ---
     static login = async (req: Request, res: Response) => {
         try {
-            const { email, password } = req.body;
+            const { documentNumber, password } = req.body;
+            
+            // 1. Buscar usuario por documento
+            const user = await User.findOne({ where: { documentNumber } });
 
-            // 1. Buscar usuario
-            const user = await User.findOne({ where: { email } });
             if (!user) {
-                return res.status(404).json({ error: 'Usuario no encontrado' });
+                return res.status(401).json({ 
+                    success: false, 
+                    error: 'Número de documento no registrado en el sistema.' 
+                });
             }
 
             // 2. Verificar contraseña
             const isPasswordCorrect = await user.checkPassword(password);
             if (!isPasswordCorrect) {
-                return res.status(401).json({ error: 'Contraseña incorrecta' });
+                return res.status(401).json({ 
+                    success: false, 
+                    error: 'La contraseña ingresada es incorrecta.' 
+                });
             }
 
             // 3. Generar JWT
@@ -30,14 +37,15 @@ export class AuthController {
                 { expiresIn: '8h' }
             );
 
-            // 4. Responder (Sin devolver la contraseña)
+            // 4. Responder con estructura unificada para el Frontend
             res.json({
+                success: true,
                 message: 'Autenticación exitosa',
                 token,
                 user: {
                     id: user.id,
                     name: user.name,
-                    email: user.email,
+                    documentNumber: user.documentNumber,
                     role: user.role,
                     avatarColor: user.avatarColor,
                     status: user.status
@@ -45,49 +53,59 @@ export class AuthController {
             });
 
         } catch (error) {
-            console.error(error);
-            res.status(500).json({ error: 'Error en el servidor al iniciar sesión' });
+            console.error("❌ Login Error:", error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Error interno en el servidor al intentar iniciar sesión.' 
+            });
         }
     }
 
-    // --- OLVIDÉ MI CONTRASEÑA ---
+    // --- RECUPERAR CONTRASEÑA (POR DOCUMENTO) ---
     static forgotPassword = async (req: Request, res: Response) => {
         try {
-            const { email } = req.body;
-            const user = await User.findOne({ where: { email } });
+            const { documentNumber } = req.body;
+            
+            // Buscamos por documento ahora
+            const user = await User.findOne({ where: { documentNumber } });
 
-            if (!user) {
-                // Por seguridad, no decimos si el email no existe
-                return res.json({ message: 'Si el correo existe, se enviaron las instrucciones.' });
+            if (!user || !user.email) {
+                // Respuesta genérica por seguridad
+                return res.json({ 
+                    success: true, 
+                    message: 'Si el usuario existe y tiene un correo asociado, recibirá instrucciones.' 
+                });
             }
 
-            // 1. Generar token aleatorio
             const token = crypto.randomBytes(20).toString('hex');
-
-            // 2. Guardar token y expiración (1 hora) en la DB
             user.resetPasswordToken = token;
-            user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hora
+            user.resetPasswordExpires = new Date(Date.now() + 3600000); 
             await user.save();
 
-            // 3. Crear link (Apunta a tu Frontend)
-            // Ajusta el puerto 3000 si tu frontend corre en otro lado
             const resetUrl = `http://localhost:3000/reset-password/${token}`;
-
-            // 4. Enviar correo
             const message = `
-                <h1>Recuperación de Contraseña</h1>
-                <p>Haz clic en el enlace para restablecer tu contraseña:</p>
-                <a href="${resetUrl}" target="_blank">Restablecer Contraseña</a>
-                <p>Este enlace expira en 1 hora.</p>
+                <div style="font-family: sans-serif; color: #333;">
+                    <h1 style="color: #2563eb;">Recuperación de Acceso - Vidanova</h1>
+                    <p>Has solicitado restablecer tu contraseña para el usuario con documento: <b>${user.documentNumber}</b></p>
+                    <p>Haz clic en el siguiente botón para continuar:</p>
+                    <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Restablecer Contraseña</a>
+                    <p style="margin-top: 20px; font-size: 12px; color: #666;">Este enlace expirará en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
+                </div>
             `;
 
             await sendEmail(user.email, "Restablecer Contraseña - Vidanova", message);
 
-            res.json({ message: 'Correo de recuperación enviado' });
+            res.json({ 
+                success: true, 
+                message: 'Correo de recuperación enviado con éxito.' 
+            });
 
         } catch (error) {
-            console.error(error);
-            res.status(500).json({ error: 'Error al procesar la solicitud' });
+            console.error("❌ Forgot Password Error:", error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Error al procesar la solicitud de recuperación.' 
+            });
         }
     }
 }

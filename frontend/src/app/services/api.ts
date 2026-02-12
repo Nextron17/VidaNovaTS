@@ -1,18 +1,17 @@
 import axios from 'axios';
 
-// ✅ Usa la variable de entorno o localhost por defecto si falla
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api`;
+// ✅ Forzamos el puerto 4000 que es el que configuramos en el Backend
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 60000, // 🔥 Aumentamos a 60s porque la Auditoría puede ser pesada
+  timeout: 0, // 60 segundos para procesos pesados de auditoría
 });
 
 // --- INTERCEPTOR DE REQUEST (Enviar Token) ---
 api.interceptors.request.use(
   (config) => {
-    // Verificación de window para evitar errores en Server Side Rendering
     if (typeof window !== 'undefined') {
         const token = localStorage.getItem('token');
         if (token) {
@@ -30,7 +29,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // 1. Manejo de 401 (Token Vencido o Inválido)
+    // 1. Manejo de 401 (Sesión expirada)
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       if (typeof window !== 'undefined') {
@@ -41,26 +40,22 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 2. 🔥 ESTRATEGIA ANTI-CRASH PARA ERROR 500
-    // Si el servidor muere, devolvemos un objeto seguro en lugar de lanzar una excepción
-    if (error.response?.status >= 500) {
-        console.error("🔥 Error Crítico del Backend:", error.message);
+    // 2. Estrategia Anti-Crash para Error 500 o Errores de Red
+    if (!error.response || error.response.status >= 500) {
+        console.error("❌ Error de Conexión o Servidor:", error.message);
         
-        // Devolvemos una respuesta falsa válida. 
-        // Esto permite que el frontend diga: if (!res.data.success) { mostrarAlerta() }
         return Promise.resolve({
             data: {
                 success: false,
-                message: "Error interno del servidor. Intente más tarde.",
-                stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 }, // Defaults seguros
+                message: "No se pudo establecer conexión con el servidor (Puerto 4000).",
+                stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
                 duplicates: []
             },
-            status: 500,
-            statusText: 'Internal Server Error (Handled)'
+            status: error.response?.status || 500,
+            statusText: 'Network Error / Server Error'
         });
     }
 
-    // Para errores 400, 404, etc., dejamos que el componente decida qué hacer
     return Promise.reject(error);
   }
 );

@@ -4,17 +4,17 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
-  Lock, Mail, Eye, EyeOff, 
-  ArrowRight, Loader2, AlertCircle, ShieldCheck 
+  Lock, User as UserIcon, Eye, EyeOff, 
+  ArrowRight, Loader2, AlertCircle, HelpCircle 
 } from "lucide-react";
 import { useUser } from "@/src/app/context/UserContext";
-import api from "@/src/app/services/api"; // ✅ Usamos tu archivo api.ts
+import api from "@/src/app/services/api";
 
 export default function LoginPage() {
   const { login } = useUser();
   const router = useRouter(); 
   
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState({ documento: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -25,31 +25,23 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // 1. PETICIÓN AL BACKEND REAL
       const response = await api.post('/auth/login', {
-        email: formData.email,
+        documentNumber: formData.documento,
         password: formData.password
       });
 
       const { token, user } = response.data;
-
-      // 2. GUARDAR SESIÓN
       login(token, user);
 
-      // 3. REDIRECCIÓN SEGURA (Solo Admin por ahora)
-      if (["SUPER_ADMIN", "COORDINATOR"].includes(user.role)) {
+      if (["SUPER_ADMIN", "COORDINATOR", "ADMIN"].includes(user.role)) {
         router.push("/navegacion/admin");
       } else {
-        // Si intentan entrar operarios, por ahora los mandamos a una pagina de espera o al mismo admin con acceso restringido
-        // Pero como pediste solo Admin, asumimos que solo admins entrarán.
-        alert("Acceso Operativo en construcción. Entrando a modo vista...");
         router.push("/navegacion/operativo"); 
       }
 
     } catch (err: any) {
       console.error("Login error:", err);
-      // Mensaje de error real del backend
-      setError(err.response?.data?.error || "Error de conexión con el servidor.");
+      setError(err.response?.data?.error || "Cédula o contraseña incorrecta.");
     } finally {
       setLoading(false);
     }
@@ -66,7 +58,7 @@ export default function LoginPage() {
         <div className="relative z-20">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-white shadow-lg">V</div>
-            <span className="text-2xl font-bold">Vidanova</span>
+            <span className="text-2xl font-bold tracking-tight">Vidanova</span>
           </div>
           <h1 className="text-5xl font-black leading-tight mb-6">
             Gestión Integral de <br/>
@@ -75,7 +67,7 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-20 flex gap-4 text-xs text-slate-500 font-medium">
-            <span>© 2026 Vidanova System</span> • <span>v2.4.0 Admin</span>
+            <span>© 2026 Vidanova System</span> • <span>v2.5.0</span>
         </div>
       </div>
 
@@ -83,41 +75,72 @@ export default function LoginPage() {
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 md:p-12">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center lg:text-left">
-            <h2 className="text-3xl font-black text-slate-900 mb-2">Bienvenido Admin</h2>
-            <p className="text-slate-500">Ingresa tus credenciales de gestión.</p>
+            <h2 className="text-3xl font-black text-slate-900 mb-2">Acceso al Sistema</h2>
+            <p className="text-slate-500 font-medium leading-relaxed">
+              Bienvenido de nuevo. Por favor ingresa tu número de documento.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600 text-sm">
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 text-sm animate-in fade-in slide-in-from-top-1">
                 <AlertCircle className="shrink-0 mt-0.5" size={18}/> <span>{error}</span>
               </div>
             )}
 
             <div className="space-y-4">
               <div className="relative group">
-                <Mail className="absolute left-4 top-3.5 text-slate-400" size={20}/>
+                <UserIcon className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20}/>
                 <input 
-                  type="email" placeholder="admin@vidanova.com" required
-                  className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
-                  value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  type="text" 
+                  placeholder="Número de Documento" 
+                  required
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all text-slate-700 placeholder:font-medium"
+                  value={formData.documento} 
+                  onChange={(e) => setFormData({...formData, documento: e.target.value})}
                 />
               </div>
+
               <div className="relative group">
-                <Lock className="absolute left-4 top-3.5 text-slate-400" size={20}/>
+                <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20}/>
                 <input 
-                  type={showPassword ? "text" : "password"} placeholder="••••••••••••" required
-                  className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
-                  value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Contraseña" 
+                  required
+                  className="w-full pl-12 pr-12 py-4 bg-white border border-slate-200 rounded-2xl font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all text-slate-700 placeholder:font-medium"
+                  value={formData.password} 
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
                 />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600">
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition-colors">
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
+
+              {/* ENLACE DE RECUPERACIÓN */}
+              <div className="flex justify-end px-1">
+                <Link 
+                  href="/recuperar" 
+                  className="text-xs font-bold text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-1.5 group"
+                >
+                  <HelpCircle size={14} className="group-hover:rotate-12 transition-transform"/>
+                  ¿Problemas con tu contraseña?
+                </Link>
+              </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-70">
-              {loading ? <Loader2 size={22} className="animate-spin"/> : <>Iniciar Sesión <ArrowRight size={20}/></>}
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-3 disabled:opacity-70 active:scale-[0.98] mt-2"
+            >
+              {loading ? (
+                <Loader2 size={22} className="animate-spin"/>
+              ) : (
+                <>
+                  Iniciar Sesión 
+                  <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
+                </>
+              )}
             </button>
           </form>
         </div>

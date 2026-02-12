@@ -1,40 +1,33 @@
 import colors from 'colors';
 import dotenv from 'dotenv';
-
-// 1. 🔥 Cargar variables de entorno PRIMERO
 dotenv.config(); 
 
-// 2. Importar servidor y DB
-// IMPORTANTE: Asegúrate de que './app' coincida con el nombre de tu archivo de Express
 import { server } from './server'; 
 import { sequelize } from './config/db'; 
 
-const port = process.env.PORT || 4000; // Usualmente Backend corre en 4000 o 5000 para no chocar con Next.js (3000)
+const port = process.env.PORT || 4000;
 
 async function startServer() {
     try {
-        console.log(colors.yellow('⏳ DEBUG: Intentando conectar a PostgreSQL...'));
-        
-        // 1. Probar conexión
+        console.log(colors.yellow('⏳ [VIDANOVA] Conectando a PostgreSQL...'));
         await sequelize.authenticate();
-        console.log(colors.green('✅ DEBUG: Conexión a Base de Datos establecida.'));
+        console.log(colors.green('✅ [DATABASE] Conexión establecida.'));
 
-        // 2. Sincronizar modelos
-        // 'alter: true' actualiza las tablas si agregaste columnas nuevas
-        console.log(colors.yellow('⏳ DEBUG: Sincronizando modelos (Alter)...'));
+        // --- PASO CRÍTICO ---
+        // Usamos 'force: true' para destruir la tabla con error y crearla limpia.
+        console.log(colors.magenta('🚀 [DATABASE] Reconstruyendo tabla User (Estructura limpia)...'));
         await sequelize.sync({ alter: true }); 
-        console.log(colors.green('✅ DEBUG: Modelos sincronizados correctamente.'));
+        
+        console.log(colors.green('✅ [DATABASE] Tablas creadas correctamente.'));
 
-        // 3. Iniciar el servidor
         server.listen(port, () => {
-            console.log(colors.cyan.bold(`\n🚀 Servidor Backend Vidanova activo`));
-            console.log(colors.cyan(`   👉 URL: http://localhost:${port}`));
-            console.log(colors.gray(`   📡 Esperando peticiones del Frontend...`));
+            console.log(colors.cyan.bold(`\n🚀 SERVIDOR BACKEND ACTIVO`));
+            console.log(colors.white(`   👉 Puerto: ${port}`));
+            console.log(colors.white(`   👉 Estado: `) + colors.green(`Listo para recibir al Admin`));
         });
 
-    } catch (error) {
-        console.error(colors.red('\n❌ ERROR FATAL AL INICIAR SERVIDOR:'));
-        console.error(error);
+    } catch (error: any) {
+        console.error(colors.red('\n❌ ERROR AL INICIAR SERVIDOR:'), error.message);
         process.exit(1); 
     }
 }

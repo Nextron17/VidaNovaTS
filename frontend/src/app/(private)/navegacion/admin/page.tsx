@@ -6,7 +6,7 @@ import {
   Search, Filter, ShieldAlert, X, ChartPie,
   MessageCircle, Layers, Info, CheckCircle2,
   Loader2, WifiOff, FileSpreadsheet, ChevronLeft, ChevronRight, Eye, Edit,
-  Calendar, Clock4, AlertCircle, FileText
+  Calendar, Clock4, AlertCircle, FileText, Syringe, Activity, Stethoscope, FlaskConical, Scissors
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, 
@@ -15,8 +15,7 @@ import {
 
 import api from "@/src/app/services/api";
 
-// --- 1. CONSTANTES ---
-
+// --- 1. CONSTANTES DE ESTADO ---
 const OPCIONES_ESTADO = [
   { value: "TODOS", label: "Todos" },
   { value: "PENDIENTE", label: "🟠 Pendiente" },
@@ -26,8 +25,12 @@ const OPCIONES_ESTADO = [
   { value: "CANCELADO", label: "🔴 Cancelado" },
 ];
 
-// 🔥 NUEVA LISTA DE PROCEDIMIENTOS (SOLICITADA)
-const OPCIONES_PROCEDIMIENTO = [
+const OPCIONES_EPS = [
+  "ASMET SALUD", "UNIVERSIDAD DEL CAUCA", "NUEVA EPS", "SANITAS", "SURA", "OTRA"
+];
+
+// --- 2. MODALIDADES (Servicios) ---
+const MODALIDADES = [
   "Consulta Externa", 
   "Quimioterapia", 
   "Radioterapia", 
@@ -39,64 +42,79 @@ const OPCIONES_PROCEDIMIENTO = [
   "Oncología"
 ];
 
-const OPCIONES_EPS = [
-  "ASMET SALUD", "UNIVERSIDAD DEL CAUCA", "NUEVA EPS", "SANITAS", "SURA", "OTRA"
+// --- 3. GRUPOS CAC (Diagnósticos) ---
+const CAC_GROUPS = [
+    "1= CAC Mama",
+    "2= CAC Próstata",
+    "3= CAC Cérvix",
+    "4= CAC Colorectal",
+    "5= CAC Estómago",
+    "6= CAC Melanoma",
+    "7= CAC Pulmón",
+    "8= CAC Linfoma Hodgkin",
+    "9= CAC Linfoma No Hodgkin",
+    "10= CAC Leucemia Linfocítica Aguda",
+    "11= CAC Leucemia Mielocítica Aguda",
+    "12= Labio, cavidad bucal y faringe",
+    "13= Otros órganos digestivos",
+    "14= Otros órganos respiratorios",
+    "15= Huesos y cartílagos articulares",
+    "16= Otros tumores de la piel",
+    "17= Tejidos mesoteliales y blandos",
+    "18= Otros órganos genitales femeninos",
+    "19= Otros órganos genitales masculinos",
+    "20= Vías urinarias",
+    "21= Ojo, encéfalo y sistema nervioso central",
+    "22= Glándulas tiroides y endocrinas",
+    "23= Sitios mal definidos / No especificados",
+    "24= Otros tumores tejido linfático/hematopoyético",
+    "25= Tumores secundarios"
 ];
 
-const OPCIONES_COHORTE = [
-  "1= CAC Mama", "2= CAC Próstata", "3= CAC Cérvix", "4= CAC Colorectal", 
-  "5= CAC Estómago", "6= CAC Melanoma", "7= CAC Pulmón", "8= CAC Linfoma Hodgkin",
-  "9= CAC Linfoma No Hodgkin", "10= CAC Leucemia Linfocítica Aguda", 
-  "11= CAC Leucemia Mielocítica Aguda", "12= Labio, cavidad bucal y faringe",
-  "13= Otros órganos digestivos", "14= Otros órganos respiratorios e intratorácicos",
-  "15= Huesos y cartílagos articulares", "16= Otros tumores de la piel",
-  "17= Tejidos mesoteliales y blandos", "18= Otros órganos genitales femeninos",
-  "19= Otros órganos genitales masculinos", "20= Vías urinarias (Riñón/Vejiga)",
-  "21= Ojo, encéfalo y sistema nervioso central", "22= Glándulas tiroides y endocrinas",
-  "23= Sitios mal definidos / No especificados", "24= Otros tumores tejido linfático/hematopoyético",
-  "25= Tumores secundarios", "Otros Diagnósticos",
-  "CONSULTA", "PROCEDIMIENTOS", "LABORATORIO", "IMAGENES", "CIRUGIA", 
-  "QUIMIOTERAPIA", "RADIOTERAPIA", "ESTANCIA", "OTROS", "PENDIENTE"
+// 🔥 FILTRO COMBINADO
+const OPCIONES_FILTRO = [ 
+    ...MODALIDADES, 
+    ...CAC_GROUPS, 
+    "OTROS", 
+    "PENDIENTE" 
 ];
 
 const COLORS_ESTADOS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444']; 
 
-// --- HELPER: DETECTOR DE MODALIDAD (PARA LA TABLA) ---
-const getServiceType = (name: string) => {
-  const n = (name || '').toUpperCase();
-  if (n.includes('QUIMIO') || n.includes('INFUSION') || n.includes('BEVACIZUMAB')) return 'QUIMIOTERAPIA';
-  if (n.includes('RADIOTERAPIA') || n.includes('TELETERAPIA') || n.includes('ACELERADOR')) return 'RADIOTERAPIA';
-  if (n.includes('CONSULTA') || n.includes('VALORACION') || n.includes('CONTROL')) return 'CONSULTA EXTERNA';
-  if (n.includes('RADIOGRAFIA') || n.includes('TAC') || n.includes('RESONANCIA') || n.includes('ECOGRAFIA') || n.includes('GAMAGRAFIA')) return 'IMAGENOLOGÍA';
-  if (n.includes('LABORATORIO') || n.includes('HEMOGRAMA') || n.includes('SANGRE') || n.includes('PATOLOGIA')) return 'LABORATORIO';
-  if (n.includes('CIRUGIA') || n.includes('RESECCION') || n.includes('ECTOMIA')) return 'CIRUGÍA';
-  if (n.includes('INTERNACION') || n.includes('HOSPITAL') || n.includes('ESTANCIA')) return 'ESTANCIA';
-  if (n.includes('DOLOR') || n.includes('PALIATIVO')) return 'CLÍNICA DEL DOLOR';
-  return 'PROCEDIMIENTO / OTRO';
+// --- HELPER: ICONO POR MODALIDAD ---
+const getIconByModality = (modality: string) => {
+    const m = (modality || '').toUpperCase();
+    if (m.includes('QUIMIO')) return <Syringe size={12}/>;
+    if (m.includes('RADIO') || m.includes('IMAGEN')) return <Activity size={12}/>;
+    if (m.includes('CONSULTA')) return <Stethoscope size={12}/>;
+    if (m.includes('LAB')) return <FlaskConical size={12}/>;
+    if (m.includes('CIRUGIA')) return <Scissors size={12}/>;
+    return <FileText size={12}/>;
+};
+
+// --- HELPER: EXTRAER COHORTE ---
+const extractCohort = (obs: string) => {
+    if (!obs) return "Sin Cohorte";
+    // Busca COHORTE o DX SUGERIDO (Adaptado a tu backend nuevo)
+    const match = obs.match(/(?:COHORTE|DX SUGERIDO):\s*([^|]+)/i);
+    const txt = match ? match[1].trim() : "General";
+    return txt.replace("= CAC", "").replace("=", " "); 
 };
 
 // --- COMPONENTE WHATSAPP ---
 const WhatsAppActions = ({ tel, nombre }: { tel: string, nombre: string }) => {
   const strTel = String(tel || "");
   if (!strTel || strTel.length < 5) return <span className="text-slate-300">-</span>;
-
   const numbers = strTel.split(/[\/\:\-\s]+/).map(n => n.replace(/\D/g, '')).filter(n => n.length >= 7);
-
   if (numbers.length === 0) return <span className="text-slate-300">-</span>;
 
   if (numbers.length === 1) {
     return (
-      <a 
-        href={`https://wa.me/57${numbers[0]}?text=Hola ${nombre}, nos comunicamos de Vidanova...`} 
-        target="_blank" rel="noopener noreferrer"
-        className="inline-flex items-center justify-center w-6 h-6 bg-green-100 text-green-600 rounded-full hover:bg-green-200 transition-colors border border-green-200 shadow-sm"
-        title={`Chat con ${numbers[0]}`}
-      >
+      <a href={`https://wa.me/57${numbers[0]}?text=Hola ${nombre}, nos comunicamos de Vidanova...`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center w-6 h-6 bg-green-100 text-green-600 rounded-full hover:bg-green-200 transition-colors border border-green-200 shadow-sm" title={`Chat con ${numbers[0]}`}>
         <MessageCircle size={14} />
       </a>
     );
   }
-
   return (
     <div className="relative group inline-block">
       <button className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full hover:bg-green-100 transition-colors border border-green-200 shadow-sm">
@@ -115,7 +133,6 @@ const WhatsAppActions = ({ tel, nombre }: { tel: string, nombre: string }) => {
 };
 
 export default function AdminDashboardPage() {
-  // --- ESTADOS ---
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [patients, setPatients] = useState<any[]>([]);
@@ -132,8 +149,7 @@ export default function AdminDashboardPage() {
     cohorte: [] as string[], 
     fechaIni: "", 
     fechaFin: "", 
-    estado: "TODOS", 
-    procedimiento: "TODOS" 
+    estado: "TODOS" 
   });
   
   const [seleccionados, setSeleccionados] = useState<number[]>([]);
@@ -143,7 +159,6 @@ export default function AdminDashboardPage() {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
-  // --- LOGICA DE CARGA ---
   const fetchData = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
@@ -153,8 +168,9 @@ export default function AdminDashboardPage() {
         if (filtros.eps !== 'TODAS') params.eps = filtros.eps;
         if (filtros.fechaIni) params.startDate = filtros.fechaIni;
         if (filtros.fechaFin) params.endDate = filtros.fechaFin;
-        if (filtros.procedimiento !== 'TODOS') params.procedure = filtros.procedimiento;
-        if (filtros.cohorte.length > 0) params.cohorte = filtros.cohorte.join(',');
+        
+        // Enviamos las modalidades y CACs seleccionados
+        if (filtros.cohorte.length > 0) params.cohorte = filtros.cohorte.join(','); 
         
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
@@ -176,9 +192,9 @@ export default function AdminDashboardPage() {
                     doc: p.documentNumber,
                     eps: p.insurance || "SIN EPS",
                     tel: p.phone,
-                    tipo_proc: f.category || "PENDIENTE", // La Cohorte (1= CAC Mama)
-                    servicio: f.serviceName || "",        // El nombre real del servicio
-                    cups: f.cups || "N/A",                // El código
+                    modalidad: f.category || "PENDIENTE", 
+                    cups: f.cups || "N/A",                
+                    cohorte: extractCohort(f.observation), 
                     fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '',
                     fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : null,
                     dias: dias,
@@ -188,13 +204,11 @@ export default function AdminDashboardPage() {
                 };
             });
 
-            // Procesar Gráfica
             if (data.stats && data.stats.topProcedures) {
-                // Filtramos o mapeamos para intentar coincidir con los grupos deseados si es posible
-                setChartData(data.stats.topProcedures.map((item: any) => ({
-                    name: item.name || 'OTROS',
-                    cantidad: Number(item.cantidad)
-                })));
+                const validStats = data.stats.topProcedures.filter((item: any) => 
+                    MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
+                );
+                setChartData(validStats.length > 0 ? validStats : data.stats.topProcedures);
             }
 
             setPatients(mappedData);
@@ -213,7 +227,7 @@ export default function AdminDashboardPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleFixCategories = async () => {
-    if(!confirm("¿Deseas normalizar las categorías antiguas a los 25 Grupos CAC oficiales?")) return;
+    if(!confirm("¿Deseas normalizar la base de datos a las 9 Modalidades Oficiales?")) return;
     setLoading(true);
     try {
         const res = await api.post('/patients/fix-categories');
@@ -246,7 +260,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // --- ESTILOS VISUALES ---
   const getRowStyle = (estado: string, dias: number, meta: number) => {
     if (estado === "REALIZADO") return "border-l-4 border-emerald-500 bg-emerald-50/10 hover:bg-emerald-50/20";
     if (estado === "CANCELADO") return "border-l-4 border-red-500 bg-red-50/10 opacity-70 hover:opacity-100";
@@ -347,12 +360,13 @@ export default function AdminDashboardPage() {
             <FilterSelect label="Estado" options={OPCIONES_ESTADO} value={filtros.estado} onChange={(e:any) => setFiltros({...filtros, estado: e.target.value})} />
           </div>
           <div className="md:col-span-6 lg:col-span-2">
-            <FilterSelect label="Procedimiento" options={OPCIONES_PROCEDIMIENTO} value={filtros.procedimiento} onChange={(e:any) => setFiltros({...filtros, procedimiento: e.target.value})} />
+            <FilterSelect label="EPS" options={OPCIONES_EPS} value={filtros.eps} onChange={(e:any) => setFiltros({...filtros, eps: e.target.value})} />
           </div>
 
+          {/* SELECTOR MÚLTIPLE DE MODALIDADES Y CACs */}
           <div className="md:col-span-12 lg:col-span-8">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 block flex justify-between">
-                <span>Cohorte / Grupo (Selección Múltiple)</span>
+                <span>Filtro por Modalidad / Diagnóstico (CAC)</span>
                 {filtros.cohorte.length > 0 && (
                     <button onClick={() => setFiltros({ ...filtros, cohorte: [] })} className="text-red-500 hover:underline text-[10px]">Borrar selección</button>
                 )}
@@ -360,7 +374,7 @@ export default function AdminDashboardPage() {
             <div className="flex flex-wrap gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[50px] transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 items-center">
               {filtros.cohorte.map((c) => (
                 <span key={c} className="bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm animate-in fade-in zoom-in duration-200">
-                  {c}
+                  {c.replace('=', '').replace('CAC ', '')} {/* Visualmente más corto */}
                   <button onClick={() => setFiltros({ ...filtros, cohorte: filtros.cohorte.filter(item => item !== c) })} className="hover:bg-slate-600 rounded-full p-0.5 transition-colors">
                     <X size={12} />
                   </button>
@@ -376,25 +390,43 @@ export default function AdminDashboardPage() {
                   }
                 }}
               >
-                <option value="" disabled>+ Añadir filtro...</option>
-                {OPCIONES_COHORTE.map((opt) => (
-                  <option key={opt} value={opt} disabled={filtros.cohorte.includes(opt)}>{opt}</option>
-                ))}
+                <option value="" disabled>+ Seleccionar...</option>
+                
+                {/* GRUPO MODALIDADES */}
+                <optgroup label="--- MODALIDADES ---">
+                    {MODALIDADES.map(opt => (
+                        <option key={opt} value={opt} disabled={filtros.cohorte.includes(opt)}>{opt}</option>
+                    ))}
+                    <option value="OTROS">OTROS</option>
+                    <option value="PENDIENTE">PENDIENTE</option>
+                </optgroup>
+
+                {/* GRUPO CAC */}
+                <optgroup label="--- DIAGNÓSTICOS (CAC) ---">
+                    {CAC_GROUPS.map(opt => (
+                        <option key={opt} value={opt} disabled={filtros.cohorte.includes(opt)}>{opt}</option>
+                    ))}
+                </optgroup>
               </select>
             </div>
           </div>
 
           <div className="md:col-span-12 lg:col-span-4 flex justify-end gap-3 pt-2">
             <button 
+              type="button" // 🔥 AQUÍ ESTÁ EL ARREGLO: type="button"
               onClick={() => {
                 setBusqueda(''); 
-                setFiltros({ eps: "TODAS", cohorte: [], fechaIni: "", fechaFin: "", estado: "TODOS", procedimiento: "TODOS" });
+                setFiltros({ eps: "TODAS", cohorte: [], fechaIni: "", fechaFin: "", estado: "TODOS" });
               }} 
               className="text-slate-500 hover:text-red-600 text-xs font-bold flex items-center gap-1 transition-colors px-4 py-3"
             >
               <X size={16}/> Limpiar
             </button>
-            <button onClick={fetchData} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2">
+            <button 
+                type="button" // 🔥 AQUÍ ESTÁ EL ARREGLO: type="button"
+                onClick={fetchData} 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
+            >
               <Filter size={18}/> Filtrar Resultados
             </button>
           </div>
@@ -507,24 +539,18 @@ export default function AdminDashboardPage() {
                                 </div>
                             </td>
                             <td className="px-4 py-4">
-                                {/* 🔥 FILA MULTINIVEL RENOVADA */}
-                                <div className="flex flex-col gap-1">
-                                    {/* 1. Modalidad (Inferida) */}
+                                <div className="flex flex-col gap-1.5">
                                     <div className="font-black text-slate-800 text-[11px] uppercase tracking-tight flex items-center gap-1.5">
-                                        <FileText size={12} className="text-slate-400"/>
-                                        {getServiceType(row.servicio)}
+                                        {getIconByModality(row.modalidad)}
+                                        {row.modalidad}
                                     </div>
-                                    
-                                    {/* 2. Cohorte / Categoría */}
-                                    <div className="w-fit">
-                                        <span className="text-[10px] font-bold text-blue-700 uppercase bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">
-                                            {row.tipo_proc}
+                                    <div className="w-fit max-w-[250px]">
+                                        <span className="text-[10px] font-bold text-blue-700 uppercase bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md truncate block">
+                                            {row.cohorte}
                                         </span>
                                     </div>
-
-                                    {/* 3. CUPS */}
                                     <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                                        <span className="bg-slate-100 px-1 rounded text-slate-500 font-bold border border-slate-200">CUPS</span>
+                                        <span className="bg-slate-100 px-1.5 rounded text-slate-500 font-bold border border-slate-200">CUPS</span>
                                         {row.cups}
                                     </div>
                                 </div>
@@ -555,7 +581,7 @@ export default function AdminDashboardPage() {
                             <td className="px-6 py-4 text-right">
                                 <div className="flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
                                     <Link href={`/navegacion/admin/pacientes/perfil?id=${row.id}`} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition-all" title="Ver Perfil"><Eye size={16}/></Link>
-                                    <Link href={`/navegacion/admin/gestion/nuevo?patientId=${row.id}`} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-orange-600 hover:border-orange-200 hover:shadow-sm transition-all" title="Gestionar"><Edit size={16}/></Link>
+                                    <Link href={`/navegacion/admin/gestion?id=${row.id}`} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-orange-600 hover:border-orange-200 hover:shadow-sm transition-all" title="Gestionar"><Edit size={16}/></Link>
                                 </div>
                             </td>
                         </tr>

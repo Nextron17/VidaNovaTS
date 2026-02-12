@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
-import { Menu, X, Moon, Sun, Settings, LogOut, User as UserIcon, ChevronDown, Bell } from 'lucide-react';
+import { Menu, X, Settings, LogOut, User as UserIcon, ChevronDown, Bell, ShieldCheck } from 'lucide-react';
 import { useUser } from '@/src/app/context/UserContext'; 
+import api from '@/src/app/services/api'; // Importamos tu axios configurado
 
 interface HeaderProps {
     isSidebarOpen: boolean;
@@ -14,10 +14,26 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ isSidebarOpen, toggleSidebar }) => {
     const { user, logout } = useUser();
     const [showProfileMenu, setShowProfileMenu] = useState(false);
-    const [isDark, setIsDark] = useState(false);
+    const [alertCount, setAlertCount] = useState(0); // Estado para el número de alertas
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Cierra el menú al hacer click fuera
+    // 1. Cargar conteo de alertas al iniciar
+    useEffect(() => {
+        const fetchAlertCount = async () => {
+            try {
+                const res = await api.get('/alerts/count'); // Ruta que creamos en el Paso 1
+                if (res.data.success) setAlertCount(res.data.count);
+            } catch (e) {
+                console.error("Error al cargar alertas");
+            }
+        };
+
+        fetchAlertCount();
+        // Opcional: Actualizar cada 5 minutos
+        const interval = setInterval(fetchAlertCount, 300000);
+        return () => clearInterval(interval);
+    }, []);
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -28,96 +44,73 @@ const Header: React.FC<HeaderProps> = ({ isSidebarOpen, toggleSidebar }) => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const toggleDark = () => {
-        const newDark = !isDark;
-        setIsDark(newDark);
-        document.documentElement.classList.toggle('dark', newDark);
-    };
-
     return (
-        // Header sticky que se ajusta al ancho disponible
-        <header className={`flex justify-between items-center px-6 py-3 bg-white border-b border-slate-200 sticky top-0 z-30 transition-all duration-300`}>
+        <header className="flex justify-between items-center px-8 py-4 bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm">
             
-            {/* Lado Izquierdo: Título y Toggle Sidebar */}
             <div className="flex items-center gap-4">
-                <button 
-                    onClick={toggleSidebar} 
-                    className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors lg:hidden"
-                >
+                <button onClick={toggleSidebar} className="p-2.5 rounded-xl text-slate-500 hover:bg-slate-50 lg:hidden border border-transparent">
                     {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
                 
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:block">
-                    PANEL ADMINISTRATIVO
-                </h2>
+                <div className="flex flex-col">
+                    <h2 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] leading-none mb-1">Vidanova</h2>
+                    <h1 className="text-sm font-bold text-slate-700 hidden sm:block">Panel Administrativo</h1>
+                </div>
             </div>
 
-            {/* Lado Derecho: Acciones y Perfil */}
-            <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-3">
                 
-                {/* --- AQUÍ ESTÁ EL CAMBIO: Notificaciones con Link --- */}
+                {/* CENTRO DE ALERTAS CON CONTADOR DINÁMICO */}
                 <Link href="/navegacion/admin/alertas">
-                    <button className="relative p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all" title="Centro de Alertas">
-                        <Bell size={20} />
-                        {/* Punto rojo animado */}
-                        <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse"></span>
+                    <button className="relative p-2.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all group">
+                        <Bell size={20} className={alertCount > 0 ? "animate-wiggle" : ""} />
+                        
+                        {alertCount > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-orange-600 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center px-1 shadow-sm">
+                                {alertCount > 9 ? '+9' : alertCount}
+                            </span>
+                        )}
                     </button>
                 </Link>
 
-                {/* Separador Vertical */}
-                <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+                <div className="h-8 w-px bg-slate-100 mx-2 hidden sm:block"></div>
 
-                {/* Menú de Usuario */}
+                {/* MENÚ DE USUARIO */}
                 <div className="relative" ref={menuRef}>
                     <button 
                         onClick={() => setShowProfileMenu(!showProfileMenu)} 
-                        className="flex items-center gap-3 pl-1 pr-2 py-1 rounded-full hover:bg-slate-50 transition-all group"
+                        className={`flex items-center gap-3 pl-1.5 pr-3 py-1.5 rounded-2xl transition-all border ${showProfileMenu ? 'bg-slate-50 border-slate-200' : 'bg-white border-transparent hover:border-slate-200'}`}
                     >
-                        <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 overflow-hidden relative">
-                            {user?.foto_url ? (
-                                <Image src={user.foto_url} alt="Profile" fill className="object-cover" />
-                            ) : (
-                                <UserIcon size={18} />
-                            )}
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                            <UserIcon size={18} strokeWidth={2.5} />
                         </div>
-                        
                         <div className="text-left hidden md:block">
-                            <p className="text-xs font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors">
-                                {user?.nombre_usuario || 'Coordinador Navegación'}
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">
-                                {user?.rol || 'ADMIN'}
-                            </p>
+                            <p className="text-xs font-black text-slate-800 leading-tight">{user?.nombre_usuario || 'Usuario Admin'}</p>
+                            <div className="flex items-center gap-1">
+                                <ShieldCheck size={10} className="text-blue-500" />
+                                <p className="text-[9px] text-slate-400 font-bold uppercase">{user?.rol || 'Administrador'}</p>
+                            </div>
                         </div>
-                        <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${showProfileMenu ? 'rotate-180' : ''}`}/>
+                        <ChevronDown size={14} className={`text-slate-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`}/>
                     </button>
 
-                    {/* Dropdown del Perfil */}
+                    {/* DROPDOWN */}
                     {showProfileMenu && (
-                        <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 origin-top-right">
-                            <div className="p-4 border-b border-slate-50 bg-slate-50/50">
-                                <p className="font-bold text-slate-800 text-sm truncate">{user?.nombre_usuario}</p>
-                                <p className="text-xs text-slate-500 truncate">{user?.correo || 'admin@vidanova.com'}</p>
+                        <div className="absolute right-0 mt-3 w-64 bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <p className="font-black text-slate-900 text-sm">{user?.nombre_usuario || 'Administrador'}</p>
+                                <p className="text-xs text-slate-500 font-medium truncate">{user?.correo || 'admin@vidanova.com'}</p>
                             </div>
-                            <ul className="py-1 text-sm text-slate-600">
-                                <li>
-                                    <button onClick={toggleDark} className="w-full px-4 py-2.5 hover:bg-slate-50 flex items-center gap-3 hover:text-blue-600 transition-colors">
-                                        {isDark ? <Sun size={16}/> : <Moon size={16}/>} 
-                                        <span>{isDark ? 'Modo Claro' : 'Modo Oscuro'}</span>
-                                    </button>
-                                </li>
-                                <li>
-                                    <Link href="/perfil" className="w-full px-4 py-2.5 hover:bg-slate-50 flex items-center gap-3 hover:text-blue-600 transition-colors">
-                                        <Settings size={16}/> <span>Configuración</span>
-                                    </Link>
-                                </li>
-                                <div className="h-px bg-slate-100 my-1 mx-2"></div>
-                                <li>
-                                    <button onClick={logout} className="w-full px-4 py-2.5 hover:bg-red-50 text-red-600 flex items-center gap-3 transition-colors">
-                                        <LogOut size={16}/> <span>Cerrar Sesión</span>
-                                    </button>
-                                </li>
-                            </ul>
+                            <div className="p-2">
+                                <Link href="/navegacion/admin/config" className="w-full px-4 py-3 hover:bg-blue-50 rounded-2xl flex items-center gap-3 text-slate-600 transition-all group">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm"><Settings size={16}/></div>
+                                    <span className="text-xs font-bold uppercase">Configuración</span>
+                                </Link>
+                                <button onClick={logout} className="w-full px-4 py-3 hover:bg-red-50 rounded-2xl flex items-center gap-3 text-slate-600 transition-all">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm"><LogOut size={16}/></div>
+                                    <span className="text-xs font-bold uppercase">Cerrar Sesión</span>
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

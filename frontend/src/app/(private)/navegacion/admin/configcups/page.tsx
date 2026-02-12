@@ -2,46 +2,78 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { 
-  Search, Filter, Tag, AlertCircle, 
+  Search, Filter, AlertCircle, 
   CheckCircle2, X, RefreshCw, Layers, 
-  FlaskConical, Stethoscope, Scissors, Activity, FileQuestion, Loader2, Syringe
+  FlaskConical, Stethoscope, Scissors, Activity, FileQuestion, 
+  Loader2, Syringe, Bed, HeartPulse, FileText, ChevronRight, HelpCircle
 } from "lucide-react";
 import api from "@/src/app/services/api"; 
 
-// --- CONSTANTES ---
-// Estas son las categorías exactas para que coincidan con tu base de datos y la imagen
-const CATEGORIAS = [
-    'CONSULTA', 
-    'IMAGENES', 
-    'LABORATORIO', 
-    'QUIMIOTERAPIA', 
-    'CIRUGIA',
-    'RADIOTERAPIA', // Agrego estas por si acaso existen en DB
-    'ESTANCIA',
-    'OTROS'
+// --- 1. LAS 10 CATEGORÍAS OFICIALES (VISUALES) ---
+const CATEGORIAS_VISUALES = [
+  "Consulta Externa", 
+  "Quimioterapia", 
+  "Radioterapia", 
+  "Cirugía", 
+  "Imagenología", 
+  "Laboratorio", 
+  "Clínica del Dolor", 
+  "Estancia", 
+  "Oncología",
+  "Otros" // 🔥 NUEVA
 ];
 
-// Helper visual para los badges de la tabla
-const getBadgeStyles = (grupo: string) => {
-    // Normalizamos a mayúsculas para evitar errores si viene "Consulta" en vez de "CONSULTA"
-    const g = String(grupo || "").toUpperCase().trim();
+// --- 2. MAPEO: DB -> VISUAL ---
+const mapCategoryToModality = (dbCategory: string): string => {
+    if (!dbCategory) return 'PENDIENTE';
+    const c = String(dbCategory).trim();
+    const cUpper = c.toUpperCase();
+
+    if (CATEGORIAS_VISUALES.includes(c)) return c;
+
+    if (cUpper.includes('QUIMIO')) return 'Quimioterapia';
+    if (cUpper.includes('RADIO')) return 'Radioterapia';
+    if (cUpper.includes('IMAGEN')) return 'Imagenología';
+    if (cUpper.includes('LAB')) return 'Laboratorio';
+    if (cUpper.includes('CIRUGIA') || cUpper.includes('PROCEDIMIENTOS')) return 'Cirugía';
+    if (cUpper.includes('CONSULTA') || cUpper.includes('VALORACION')) return 'Consulta Externa';
+    if (cUpper.includes('ESTANCIA') || cUpper.includes('HOSPITAL')) return 'Estancia';
+    if (cUpper.includes('DOLOR') || cUpper.includes('PALIATIVO')) return 'Clínica del Dolor';
     
-    switch (g) {
-        case 'CONSULTA': return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: Stethoscope };
-        case 'IMAGENES': return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: Activity };
-        case 'LABORATORIO': return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: FlaskConical };
-        case 'QUIMIOTERAPIA': return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', icon: Syringe }; // Icono jeringa
-        case 'CIRUGIA': return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: Scissors };
-        case 'RADIOTERAPIA': return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: Activity };
-        case 'PENDIENTE': return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: AlertCircle };
-        default: return { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', icon: Tag };
+    // Mapeo para Otros
+    if (cUpper.includes('TRANSPORTE') || cUpper.includes('COPIA') || cUpper.includes('OTROS')) return 'Otros';
+
+    if (cUpper.includes('CAC') || cUpper.includes('TUMOR') || cUpper.includes('LEUCEMIA') || cUpper.includes('LINFOMA') || cUpper.includes('CANCER')) {
+        return 'Oncología';
     }
+
+    return 'PENDIENTE';
+};
+
+// --- 3. ESTILOS VISUALES ---
+const getBadgeStyles = (grupoVisual: string) => {
+    const g = String(grupoVisual || "").toUpperCase(); 
+    
+    if (g === 'QUIMIOTERAPIA') return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', icon: Syringe };
+    if (g === 'RADIOTERAPIA') return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: Activity };
+    if (g === 'IMAGENOLOGÍA') return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: Layers };
+    if (g === 'LABORATORIO') return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: FlaskConical };
+    if (g === 'CIRUGÍA') return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: Scissors };
+    if (g === 'CONSULTA EXTERNA') return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: Stethoscope };
+    if (g === 'ESTANCIA') return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: Bed };
+    if (g === 'CLÍNICA DEL DOLOR') return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', icon: HeartPulse };
+    if (g === 'ONCOLOGÍA') return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', icon: FileText };
+    
+    // Estilo para OTROS (Gris)
+    if (g === 'OTROS') return { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', icon: HelpCircle };
+    
+    return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: AlertCircle };
 };
 
 export default function ConfigCupsPage() {
   const [isClient, setIsClient] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterGroup, setFilterGroup] = useState(""); // Estado del filtro
+  const [filterGroup, setFilterGroup] = useState(""); 
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [data, setData] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
@@ -49,13 +81,16 @@ export default function ConfigCupsPage() {
 
   useEffect(() => { setIsClient(true); fetchCups(); }, []);
 
-  // --- 1. CARGA DE DATOS ---
   const fetchCups = async () => {
     setLoading(true);
     try {
       const res = await api.get("/patients/cups"); 
       if (res.data.success) {
-        setData(res.data.data || []);
+        const mappedData = (res.data.data || []).map((item: any) => ({
+            ...item,
+            modalidadVisual: mapCategoryToModality(item.grupo) 
+        }));
+        setData(mappedData);
       }
     } catch (error) {
       console.error("Error cargando CUPS:", error);
@@ -64,13 +99,12 @@ export default function ConfigCupsPage() {
     }
   };
 
-  // --- 2. SINCRONIZACIÓN ---
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await api.post("/patients/cups/sync");
+      const res = await api.post("/patients/cups/sync", {}, { timeout: 120000 }); 
       if (res.data.success) {
-        alert(`Sincronización exitosa.`);
+        alert(`Sincronización completa.`);
         fetchCups();
       }
     } catch (error) {
@@ -80,7 +114,6 @@ export default function ConfigCupsPage() {
     }
   };
 
-  // --- 3. ACTUALIZACIÓN MASIVA ---
   const handleBulkUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
@@ -96,8 +129,9 @@ export default function ConfigCupsPage() {
       });
 
       if (res.data.success) {
+        const newVisual = mapCategoryToModality(newGroup);
         setData(prev => prev.map(item => 
-          selectedItems.includes(item.id) ? { ...item, grupo: newGroup } : item
+          selectedItems.includes(item.id) ? { ...item, grupo: newGroup, modalidadVisual: newVisual } : item
         ));
         setSelectedItems([]);
       }
@@ -108,26 +142,18 @@ export default function ConfigCupsPage() {
     }
   };
 
-  // --- 4. LÓGICA DE FILTRADO ROBUSTA ---
   const filteredData = useMemo(() => {
     return data.filter(item => {
-      // Normalización para búsqueda de texto
       const codigo = String(item.codigo || "");
       const desc = String(item.descripcion || "").toLowerCase();
-      const matchesSearch = codigo.includes(searchTerm) || desc.includes(searchTerm.toLowerCase());
-      
-      // 🔥 Normalización para filtro de Grupo (La clave del arreglo)
-      // Convertimos ambos a mayúsculas para asegurar coincidencia exacta
-      const itemGrupo = String(item.grupo || "PENDIENTE").toUpperCase().trim();
-      const filtro = filterGroup.toUpperCase().trim();
-
-      const matchesGroup = filterGroup ? itemGrupo === filtro : true;
-      
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = codigo.includes(term) || desc.includes(term);
+      const matchesGroup = filterGroup ? item.modalidadVisual === filterGroup : true;
       return matchesSearch && matchesGroup;
     });
   }, [searchTerm, filterGroup, data]);
 
-  const pendientesCount = data.filter(i => (i.grupo || 'PENDIENTE').toUpperCase() === 'PENDIENTE').length;
+  const pendientesCount = data.filter(i => i.modalidadVisual === 'PENDIENTE').length;
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) setSelectedItems(filteredData.map(i => i.id));
@@ -196,7 +222,6 @@ export default function ConfigCupsPage() {
             />
         </div>
         
-        {/* --- FILTRO DROPDOWN (COINCIDE CON TU IMAGEN) --- */}
         <div className="w-full md:w-72 relative group">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500">
                 <Filter size={20}/>
@@ -208,13 +233,12 @@ export default function ConfigCupsPage() {
             >
                 <option value="">Todas las Categorías</option>
                 <option value="PENDIENTE">⚠️ Pendientes de Revisión</option>
-                {CATEGORIAS.map(c => (
+                {CATEGORIAS_VISUALES.map(c => (
                     <option key={c} value={c}>{c}</option>
                 ))}
             </select>
-            {/* Flechita personalizada */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <ChevronRight size={14} className="rotate-90"/>
             </div>
         </div>
       </div>
@@ -230,7 +254,7 @@ export default function ConfigCupsPage() {
                         </th>
                         <th className="py-5 px-4 w-40">Código</th>
                         <th className="py-5 px-4">Descripción del Servicio</th>
-                        <th className="py-5 px-4 w-56">Categoría Asignada</th>
+                        <th className="py-5 px-4 w-64">Categoría Asignada</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -238,10 +262,11 @@ export default function ConfigCupsPage() {
                       <tr><td colSpan={4} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-500" size={40}/></td></tr>
                     ) : filteredData.map((item) => {
                         const isSelected = selectedItems.includes(item.id);
-                        const styles = getBadgeStyles(item.grupo);
+                        const styles = getBadgeStyles(item.modalidadVisual); 
                         const BadgeIcon = styles.icon;
+                        
                         return (
-                            <tr key={item.id} onClick={() => handleSelectItem(item.id)} className={`group transition-all duration-200 cursor-pointer ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'} ${(item.grupo === 'PENDIENTE' || !item.grupo) && !isSelected ? 'bg-amber-50/20' : ''}`}>
+                            <tr key={item.id} onClick={() => handleSelectItem(item.id)} className={`group transition-all duration-200 cursor-pointer ${isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50'} ${(item.modalidadVisual === 'PENDIENTE') && !isSelected ? 'bg-amber-50/20' : ''}`}>
                                 <td className="p-5 text-center" onClick={(e) => e.stopPropagation()}>
                                     <input type="checkbox" className="w-5 h-5 rounded-md border-2 border-slate-300 text-blue-600 cursor-pointer" checked={isSelected} onChange={() => handleSelectItem(item.id)} />
                                 </td>
@@ -252,8 +277,8 @@ export default function ConfigCupsPage() {
                                     <p className="text-sm font-semibold text-slate-700 line-clamp-2">{item.descripcion}</p>
                                 </td>
                                 <td className="py-5 px-4">
-                                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border ${styles.bg} ${styles.text} ${styles.border} shadow-sm`}>
-                                        <BadgeIcon size={12} strokeWidth={3} /> {item.grupo || 'PENDIENTE'}
+                                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border ${styles.bg} ${styles.text} ${styles.border} shadow-sm`} title={`Valor DB: ${item.grupo || 'Vacío'}`}>
+                                        <BadgeIcon size={12} strokeWidth={3} /> {item.modalidadVisual}
                                     </span>
                                 </td>
                             </tr>
@@ -266,7 +291,6 @@ export default function ConfigCupsPage() {
                                     <FileQuestion size={48} className="opacity-50"/>
                                     <div>
                                         <p className="text-lg font-bold text-slate-600">No se encontraron procedimientos</p>
-                                        <p className="text-sm">Si acabas de cargar un archivo, dale a "Sincronizar Nuevos".</p>
                                     </div>
                                 </div>
                             </td>
@@ -288,7 +312,7 @@ export default function ConfigCupsPage() {
             <div className="flex items-center gap-3">
                 <select name="bulk_group" defaultValue="" className="bg-white/10 text-white text-sm font-bold py-2 pl-4 pr-10 rounded-xl border border-white/10 outline-none cursor-pointer appearance-none" required>
                     <option value="" disabled className="text-slate-900">Categoría...</option>
-                    {CATEGORIAS.map(c => <option key={c} value={c} className="text-slate-900">{c}</option>)}
+                    {CATEGORIAS_VISUALES.map(c => <option key={c} value={c} className="text-slate-900">{c}</option>)}
                 </select>
             </div>
             <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-lg"><CheckCircle2 size={18}/> Actualizar</button>
@@ -297,4 +321,4 @@ export default function ConfigCupsPage() {
       </div>
     </div>
   );
-}   
+}

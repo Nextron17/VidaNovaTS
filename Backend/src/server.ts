@@ -5,36 +5,37 @@ import { createServer } from 'http';
 
 // Importación de Rutas
 import authRoutes from './routes/authRoutes';
-import auditRoutes from './routes/auditRoutes'; // <--- IMPORTAR
+import auditRoutes from './routes/auditRoutes';
 import userRoutes from './routes/userRoutes';
 import patientRoutes from './routes/patientRoutes';
 import followUpRoutes from './routes/followUpRoutes';
-import analyticsRoutes from './routes/analyticsRoutes'; // <--- IMPORTAR
-import alertRoutes from './routes/alertRoutes'; // <--- IMPORTAR
+import analyticsRoutes from './routes/analyticsRoutes'; 
+import alertRoutes from './routes/alertRoutes'; 
 import backupRoutes from './routes/backupRoutes'; 
-
 
 const app = express();
 
-// --- 1. AUMENTAR LÍMITE DE CARGA (CRUCIAL PARA EXCEL) ---
-// Sin esto, la carga de archivos grandes fallará con "Network Error"
+// --- 1. CONFIGURACIÓN DE SEGURIDAD Y CARGA ---
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// --- 2. CONFIGURACIÓN CORS ROBUSTA ---
-// Simplificamos para desarrollo local para evitar bloqueos
+// --- 2. CORS MEJORADO ---
+// Agregamos explícitamente localhost con IP y nombre para evitar fallos de resolución
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    process.env.FRONTEND_URL
+].filter(Boolean) as string[];
+
+// Borra el bloque anterior y pega este:
 app.use(cors({
-    origin: [
-        'http://localhost:3000', 
-        'http://127.0.0.1:3000',
-        process.env.FRONTEND_URL || ''
-    ],
+    origin: true, // Permite cualquier origen dinámicamente en desarrollo
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true // Permite cookies/headers de autorización
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    credentials: true,
+    exposedHeaders: ['Content-Disposition']
 }));
 
-// Logger de peticiones HTTP
 app.use(morgan('dev'));
 
 // --- 3. DEFINICIÓN DE RUTAS ---
@@ -46,30 +47,38 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/analytics', analyticsRoutes); 
 app.use('/api/alerts', alertRoutes); 
 app.use('/api/backup', backupRoutes);
-// Ruta Health Check (Para verificar que el servidor vive)
+
+// Health Check
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        project: 'Vidanova Backend', 
-        time: new Date().toISOString() 
+        server: 'Vidanova Backend', 
+        database: 'Connected', // Esto asume que el servidor solo sube si la DB está ok
+        timestamp: new Date().toISOString() 
     });
 });
 
-// --- 4. MANEJO DE ERRORES GLOBAL ---
+// --- 4. MANEJO DE RUTAS NO ENCONTRADAS (404) ---
+// Crucial para que el frontend no reciba un HTML de error sino un JSON claro
+app.use((req: Request, res: Response) => {
+    res.status(404).json({
+        success: false,
+        error: `La ruta ${req.originalUrl} no existe en este servidor.`
+    });
+});
+
+// --- 5. MANEJO DE ERRORES GLOBAL ---
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-    console.error('🔥 ERROR GLOBAL:', err.stack || err.message);
+    console.error('🔥 ERROR SISTEMA:', err.message);
     
     const status = err.status || 500;
-    const message = err.message || 'Error interno del servidor';
-
     res.status(status).json({
         success: false,
-        error: message,
-        details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        error: err.message || 'Error interno del servidor',
+        code: err.code || 'INTERNAL_ERROR'
     });
 });
 
-// --- Crear servidor HTTP ---
 const server = createServer(app);
 
 export { app, server };

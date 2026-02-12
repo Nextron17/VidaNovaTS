@@ -7,7 +7,8 @@ import {
   ArrowLeft, MapPin, Clock, CheckCircle2, AlertCircle, 
   Loader2, ShieldCheck, MessageCircle, ChevronDown, ExternalLink,
   FileText, Pencil, Plus, User, FileDown, Trash2,
-  Stethoscope, Building2, UserCog, CalendarClock, Ban
+  Stethoscope, Building2, UserCog, CalendarClock, Ban,
+  Edit, Eye
 } from "lucide-react";
 import api from "@/src/app/services/api";
 
@@ -25,23 +26,32 @@ const getDocType = (type: string) => {
 };
 
 // --- UTILIDAD 2: Parsear la Observación "Rica" ---
-// Convierte: "Nota medica... | PROF: Juan | LUGAR: Sede" -> Objeto { text, meta: { PROF: 'Juan'... } }
+// Extrae metadatos usando Regex para ser más flexible con formatos sucios
 const parseMetadata = (fullObs: string) => {
     if (!fullObs) return { text: '', meta: {} as any };
     
-    const parts = fullObs.split('|');
-    const cleanText = parts[0].trim(); // La nota real (lo primero)
+    // 1. Extraer la nota limpia (todo lo que está antes del primer pipe | o tag conocido)
+    const cleanTextMatch = fullObs.match(/^([^|]+)/);
+    const text = cleanTextMatch ? cleanTextMatch[1].trim() : '';
+
+    // 2. Extraer metadatos usando Regex global
     const meta: any = {};
+    
+    // Función helper para extraer valor de un tag
+    const extract = (tag: string) => {
+        const regex = new RegExp(`(?:\\||\\n)\\s*${tag}:\\s*([^|\\n]+)`, 'i');
+        const match = fullObs.match(regex);
+        return match ? match[1].trim() : null;
+    };
 
-    // Procesamos el resto de partes (tags)
-    parts.slice(1).forEach(part => {
-        const [key, val] = part.split(':');
-        if (key && val) {
-            meta[key.trim().toUpperCase()] = val.trim();
-        }
-    });
+    meta.PROF = extract('PROF');
+    meta.LUGAR = extract('LUGAR');
+    meta.RESP = extract('RESP');
+    meta.BARRERA = extract('BARRERA');
+    meta.DX = extract('DX') || extract('DX SUGERIDO');
+    meta['F.NOTA'] = extract('F.NOTA');
 
-    return { text: cleanText, meta };
+    return { text, meta };
 };
 
 function ProfileContent() {
@@ -57,7 +67,12 @@ function ProfileContent() {
       try {
         const res = await api.get(`/patients/${id}`);
         if (res.data.success) {
-            setPatient(res.data.data);
+            // Ordenar historial por fecha descendente (más reciente primero)
+            const sortedData = res.data.data;
+            if (sortedData.followups) {
+                sortedData.followups.sort((a: any, b: any) => new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime());
+            }
+            setPatient(sortedData);
         }
       } catch (error) {
         console.error(error);
@@ -112,12 +127,12 @@ function ProfileContent() {
                         </div>
                     </div>
                     <span className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest border ${patient.status === 'ACTIVO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-600 border-slate-300'}`}>
-                        {patient.status}
+                        {patient.status || 'SIN ESTADO'}
                     </span>
                 </div>
             </div>
 
-            {/* BOTONES */}
+            {/* BOTONES DE ACCIÓN */}
             <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                 <button onClick={handleDelete} className="px-4 py-3 bg-red-50 border border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition-all">
                     <Trash2 size={16}/>
@@ -128,6 +143,8 @@ function ProfileContent() {
                 <Link href={`/navegacion/admin/pacientes/perfil/pdf?id=${patient.id}`} className="px-4 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all flex gap-2 items-center">
                     <FileDown size={16}/> PDF
                 </Link>
+                
+                {/* Botón Nuevo Seguimiento (Envía patientId correctamente) */}
                 <Link href={`/navegacion/admin/gestion/nuevo?patientId=${patient.id}`} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex gap-2 items-center">
                     <Plus size={18}/> Nuevo Seguimiento
                 </Link>
@@ -155,7 +172,6 @@ function ProfileContent() {
         ) : (
             <div className="relative pl-8 border-l-2 border-slate-200 ml-4 space-y-10">
                 {patient.followups.map((h: any) => {
-                    // 🔥 PARSEAMOS LA DATA AQUÍ
                     const { text, meta } = parseMetadata(h.observation);
                     
                     return (
@@ -167,10 +183,10 @@ function ProfileContent() {
                                 {h.dateRequest ? new Date(h.dateRequest).toLocaleDateString('es-CO') : 'Sin Fecha'}
                             </div>
 
-                            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all">
+                            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all relative">
                                 
                                 {/* CABECERA DE LA TARJETA */}
-                                <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4 border-b border-slate-50 pb-4">
+                                <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4 border-b border-slate-50 pb-4 pr-10">
                                     <div>
                                         <h6 className="font-bold text-slate-900 text-base leading-tight">{h.serviceName || 'Procedimiento General'}</h6>
                                         <div className="flex flex-wrap gap-2 mt-2">
@@ -180,11 +196,20 @@ function ProfileContent() {
                                         </div>
                                     </div>
                                     <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black border uppercase whitespace-nowrap ${getStatusColor(h.status)}`}>
-                                        {h.status}
+                                        {h.status.replace('_', ' ')}
                                     </span>
                                 </div>
 
-                                {/* 🔥 DETALLES RICOS (Extraídos de la observación) */}
+                                {/* BOTÓN DE ACCIÓN (VER DETALLE) */}
+                                <Link 
+                                    href={`/navegacion/admin/gestion?id=${h.id}`} 
+                                    className="absolute top-6 right-6 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all" 
+                                    title="Ver Detalle Completo"
+                                >
+                                    <ExternalLink size={20}/>
+                                </Link>
+
+                                {/* DETALLES RICOS (Metadatos) */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 mb-4">
                                     {meta.PROF && (
                                         <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
@@ -206,6 +231,11 @@ function ProfileContent() {
                                             <CalendarClock size={14} className="text-emerald-500"/> <span>Nota: {meta['F.NOTA']}</span>
                                         </div>
                                     )}
+                                    {meta.DX && (
+                                        <div className="flex items-center gap-2 text-xs font-medium text-slate-600 md:col-span-2">
+                                            <FileText size={14} className="text-pink-500"/> <span className="truncate font-bold">{meta.DX}</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* ALERTAS (Barreras) */}
@@ -219,7 +249,7 @@ function ProfileContent() {
                                     </div>
                                 )}
 
-                                {/* NOTA LIMPIA */}
+                                {/* NOTA LIMPIA (Texto Humano) */}
                                 {text && (
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                                         <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-2">
@@ -245,12 +275,7 @@ function InfoCard({ icon, color, label, value, sub, isContact = false }: any) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const colors: any = { blue: "bg-blue-50 text-blue-600", orange: "bg-orange-50 text-orange-600", green: "bg-emerald-50 text-emerald-600" };
-    
-    // Extractor de teléfonos seguro
-    const numbers = isContact && value 
-        ? value.toString().split(/[\/\-,]+/).map((n: string) => n.trim().replace(/\D/g, '')).filter((n: string) => n.length > 6)
-        : [];
-
+    const numbers = isContact && value ? value.toString().split(/[\/\-,]+/).map((n: string) => n.trim().replace(/\D/g, '')).filter((n: string) => n.length > 6) : [];
     return (
         <div className="bg-white border border-slate-200 rounded-[2rem] p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all relative">
             <div className={`p-4 rounded-2xl ${colors[color]}`}>{React.cloneElement(icon, { size: 24, strokeWidth: 2.5 })}</div>
@@ -258,21 +283,10 @@ function InfoCard({ icon, color, label, value, sub, isContact = false }: any) {
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">{label}</span>
                 <div className="text-sm font-bold text-slate-800 truncate mb-1" title={value}>{value}</div>
                 <div className="text-xs text-slate-400 font-medium truncate" title={sub}>{sub}</div>
-                
                 {isContact && numbers.length > 0 && (
                     <div className="mt-3 relative" ref={dropdownRef}>
-                        <button onClick={() => setIsOpen(!isOpen)} className="w-full py-2 bg-emerald-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200">
-                            WhatsApp <ChevronDown size={14}/>
-                        </button>
-                        {isOpen && (
-                            <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden">
-                                {numbers.map((num: string, idx: number) => (
-                                    <a key={idx} href={`https://wa.me/57${num}`} target="_blank" className="block px-4 py-3 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex justify-between">
-                                        {num} <ExternalLink size={12}/>
-                                    </a>
-                                ))}
-                            </div>
-                        )}
+                        <button onClick={() => setIsOpen(!isOpen)} className="w-full py-2 bg-emerald-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200">WhatsApp <ChevronDown size={14}/></button>
+                        {isOpen && (<div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden">{numbers.map((num: string, idx: number) => (<a key={idx} href={`https://wa.me/57${num}`} target="_blank" className="block px-4 py-3 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex justify-between">{num} <ExternalLink size={12}/></a>))}</div>)}
                     </div>
                 )}
             </div>
