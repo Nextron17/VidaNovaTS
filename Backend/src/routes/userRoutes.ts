@@ -6,38 +6,46 @@ import { authenticate, authorize } from '../middleware/authMiddleware';
 const router = Router();
 
 // --- ZONA COMÚN (Todos los logueados) ---
-// El middleware 'authenticate' protege todas las rutas de abajo
 router.use(authenticate);
 
-// 1. RUTAS PERSONALES (Mi Perfil)
-// Deben ir ANTES de las rutas con /:id para evitar conflictos
+// 1. RUTAS PERSONALES (Cualquiera puede editar su propio perfil)
 router.get('/me', UserController.getProfile);
-router.put('/me', UserController.updateProfile);          // <--- NUEVO: Editar mis datos
-router.put('/me/password', UserController.changePassword); // <--- NUEVO: Cambiar mi clave
+router.put('/me', UserController.updateProfile);
+router.put('/me/password', UserController.changePassword);
 
 
-// --- ZONA ADMIN (Solo Coordinadores y SuperAdmin) ---
+// --- ZONA ADMIN (Gestión de Equipos) ---
 
-// 2. GESTIÓN DE EQUIPO
+// ⛔ Solo Jefes (El Navegador NO está aquí)
+const BOSS_ROLES = ['COORDINATOR_NAVIGATOR', 'SUPER_ADMIN'];
+
+// Obtener lista de usuarios
 router.get('/', 
-    authorize(['COORDINATOR', 'SUPER_ADMIN']), 
+    authorize(BOSS_ROLES), 
     UserController.getTeam
 );
 
+// Crear nuevo usuario
 router.post('/', [
-    authorize(['COORDINATOR', 'SUPER_ADMIN']),
-    body('email').isEmail().withMessage('Debe ser un email válido'),
+    authorize(BOSS_ROLES),
+    // Validaciones
+    body('documentNumber').notEmpty().withMessage('El documento es obligatorio'),
+    body('name').notEmpty().withMessage('El nombre es obligatorio'),
+    body('email').optional({ checkFalsy: true }).isEmail().withMessage('Formato inválido'),
     body('password').isLength({ min: 6 }).withMessage('Mínimo 6 caracteres')
 ], UserController.createUser);
 
+// Eliminar usuario
 router.delete('/:id', [
-    authorize(['COORDINATOR', 'SUPER_ADMIN']),
+    authorize(BOSS_ROLES),
     param('id').isInt().withMessage('El ID debe ser numérico')
 ], UserController.deleteUser);
 
+// Editar rol o datos de otro usuario
 router.put('/:id', [
-    authorize(['COORDINATOR', 'SUPER_ADMIN']),
-    param('id').isInt().withMessage('El ID debe ser numérico')
+    authorize(BOSS_ROLES),
+    param('id').isInt().withMessage('El ID debe ser numérico'),
+    body('email').optional({ checkFalsy: true }).isEmail().withMessage('Email inválido')
 ], UserController.updateUser);
 
 export default router;

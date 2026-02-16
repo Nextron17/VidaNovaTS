@@ -1,35 +1,65 @@
 import { Router } from 'express';
 import { PatientController } from '../controllers/PatientController';
-import { authenticate } from '../middleware/authMiddleware';
-import multer from 'multer';
 import { CupsController } from '../controllers/CupsController';
+import { authenticate, authorize } from '../middleware/authMiddleware';
+import multer from 'multer';
 
 const router = Router();
-
-// Configuración de subida de archivos (Memoria)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Middleware de seguridad
+// 1. Todos deben estar logueados
 router.use(authenticate);
 
-// 1. RUTAS DE CUPS (Procedimientos)
-router.get('/cups', PatientController.getCups);
-router.put('/cups/bulk-update', PatientController.bulkUpdateCups);
-router.post('/cups/sync', PatientController.syncCups);
+// --- DEFINICIÓN DE PERMISOS ---
 
-// 2. RUTAS DE PACIENTES (Gestión General)
-router.get('/', PatientController.getPatients); // Listado + Filtros
-router.post('/upload', upload.single('archivo'), PatientController.importPatients); // Importar Excel
-router.put('/bulk-update', PatientController.bulkUpdate); // Acción masiva
-router.post('/', PatientController.createPatient); // Crear manual
-router.post('/fix-categories', CupsController.fixLegacyCategories);
+// A. Jefes (Acceso Total: Borrar, Auditar, Reparar)
+const BOSS_ROLES = ['COORDINATOR_NAVIGATOR', 'SUPER_ADMIN'];
 
-// 3. RUTAS ESPECÍFICAS (Audit debe ir ANTES de :id)
-router.get('/audit', PatientController.getAuditStats); // <--- MOVIDO AQUÍ
+// B. Operativos (Acceso Diario: Crear, Editar, Importar)
+// Incluye a los jefes porque ellos también pueden operar si quieren
+const OPERATIVE_ROLES = ['NAVIGATOR', ...BOSS_ROLES];
 
-// 4. RUTAS POR ID (Siempre al final)
-router.get('/:id', PatientController.getPatientById); // Ver detalle
-router.delete('/:id', PatientController.deletePatient); // Eliminar
-router.put('/:id', PatientController.updatePatient); // Editar maual
+
+// --- RUTAS DE CUPS (Configuración del sistema) ---
+
+// Ver listado lo hacen todos
+router.get('/cups', authorize(OPERATIVE_ROLES), PatientController.getCups);
+// Actualizar masivamente CUPS es delicado -> Jefes
+router.put('/cups/bulk-update', authorize(BOSS_ROLES), PatientController.bulkUpdateCups);
+// Sincronizar CUPS -> Operativo (a veces necesario al importar)
+router.post('/cups/sync', authorize(OPERATIVE_ROLES), PatientController.syncCups);
+// Reparar categorías (Mantenimiento) -> Solo Jefes
+router.post('/fix-categories', authorize(BOSS_ROLES), CupsController.fixLegacyCategories);
+
+
+// --- RUTAS DE PACIENTES (Core) ---
+
+// 1. Lectura y Listados (Todos)
+router.get('/', authorize(OPERATIVE_ROLES), PatientController.getPatients);
+
+// 2. Importación y Creación (El Navegador SÍ puede hacer esto)
+router.post('/upload', [
+    authorize(OPERATIVE_ROLES),
+    upload.single('archivo')
+], PatientController.importPatients);
+
+router.post('/', authorize(OPERATIVE_ROLES), PatientController.createPatient);
+
+// 3. Edición y Actualización Masiva (El Navegador SÍ puede hacer esto)
+router.put('/bulk-update', authorize(OPERATIVE_ROLES), PatientController.bulkUpdate);
+router.put('/:id', authorize(OPERATIVE_ROLES), PatientController.updatePatient);
+
+
+// --- RUTAS ESTRATÉGICAS Y DESTRUCTIVAS (Aquí bloqueamos al Navegador) ---
+
+// ⛔ Auditoría y Estadísticas (User dijo: "ni ver estadisticas")
+router.get('/audit', authorize(BOSS_ROLES), PatientController.getAuditStats);
+
+// ⛔ Eliminar Paciente (User dijo: "no eliminar")
+router.delete('/:id', authorize(BOSS_ROLES), PatientController.deletePatient);
+
+
+// --- DETALLE INDIVIDUAL (Al final) ---
+router.get('/:id', authorize(OPERATIVE_ROLES), PatientController.getPatientById);
 
 export default router;

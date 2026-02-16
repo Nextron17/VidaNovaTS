@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { User } from '../models/User';
 
-// Extendemos Express para que reconozca req.user
+// --- EXTENSIÓN DE TIPOS ---
 declare global {
     namespace Express {
         interface Request {
@@ -11,44 +11,88 @@ declare global {
     }
 }
 
-// 1. Verificar si está logueado
+// 1. MIDDLEWARE DE AUTENTICACIÓN (Blindado)
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-    const bearer = req.headers.authorization;
-
-    if (!bearer) {
-        return res.status(401).json({ error: 'No autorizado. Falta token.' });
-    }
-
-    const [, token] = bearer.split(' ');
-
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { id: number };
-        
+        const authHeader = req.headers.authorization;
+
+        // 1. Validación básica de cabecera
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ 
+                code: 'AUTH_HEADER_MISSING',
+                error: 'No autorizado. Debes enviar un token Bearer.' 
+            });
+        }
+
+        const token = authHeader.split(' ')[1];
+
+        // 2. Verificación del JWT
+        const secret = process.env.JWT_SECRET || 'secret_super_seguro_vidanova';
+        const decoded = jwt.verify(token, secret) as { id: number };
+
+        // 3. Verificación contra Base de Datos (Seguridad en tiempo real)
+        // Buscamos al usuario para asegurar que no ha sido eliminado o baneado
+        // mientras su token seguía "vivo".
         const user = await User.findByPk(decoded.id, {
-            attributes: { exclude: ['password'] }
+            attributes: { exclude: ['password', 'resetPasswordToken'] }
         });
 
         if (!user) {
-            return res.status(401).json({ error: 'Token inválido' });
+            return res.status(401).json({ 
+                code: 'USER_NOT_FOUND',
+                error: 'El usuario asociado a este token ya no existe.' 
+            });
         }
 
+        // (OPCIONAL) Si tuvieras un campo isActive o isBanned:
+        // if (!user.isActive) { return res.status(403).json({ error: 'Cuenta inhabilitada' }); }
+
+        // 4. Inyectar usuario en la request y continuar
         req.user = user;
         next();
+
     } catch (error) {
-        res.status(401).json({ error: 'Token inválido o expirado' });
+        // 5. Manejo de Errores Profesional
+        // Diferenciamos por qué falló para ayudar al Frontend
+        if (error instanceof TokenExpiredError) {
+            return res.status(401).json({ 
+                code: 'TOKEN_EXPIRED',
+                error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' 
+            });
+        }
+        
+        if (error instanceof JsonWebTokenError) {
+            return res.status(401).json({ 
+                code: 'TOKEN_INVALID',
+                error: 'Token inválido o manipulado.' 
+            });
+        }
+
+        // Error inesperado
+        console.error('Error de autenticación:', error);
+        return res.status(500).json({ error: 'Error interno de autenticación.' });
     }
 };
 
-// 2. Verificar si tiene PERMISO (Rol)
-export const authorize = (roles: string[]) => {
+// 2. MIDDLEWARE DE AUTORIZACIÓN (RBAC - Role Based Access Control)
+export const authorize = (allowedRoles: string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
+        // Fail-safe: Si por alguna razón authenticate falló pero pasó
         if (!req.user) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
+            return res.status(401).json({ 
+                code: 'Unauthenticated',
+                error: 'Usuario no identificado.' 
+            });
         }
 
-        if (!roles.includes(req.user.role)) {
+        // Verificación de Rol
+        if (!allowedRoles.includes(req.user.role)) {
+            // Log de seguridad (Opcional pero recomendado)
+            console.warn(`⛔ Acceso denegado: Usuario ${req.user.documentNumber} (${req.user.role}) intentó acceder a ruta protegida.`);
+            
             return res.status(403).json({ 
-                error: 'Acceso denegado: No tienes permisos suficientes.' 
+                code: 'FORBIDDEN_ACCESS',
+                error: `Acceso denegado. Se requiere uno de los siguientes roles: ${allowedRoles.join(', ')}` 
             });
         }
 

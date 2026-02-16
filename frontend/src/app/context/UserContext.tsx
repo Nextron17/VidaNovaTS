@@ -4,21 +4,18 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useRouter } from 'next/navigation';
 import api from '@/src/app/services/api';
 
-// 1. DEFINIMOS ROLES Y ÁREAS
-export type UserRole = 'ADMIN' | 'MEDICO' | 'NAVEGADOR' | 'FARMACEUTICO' | 'GESTOR';
-export type UserArea = 'NAVEGACION' | 'ASISTENCIAL' | 'FARMACIA' | 'GERENCIA' | 'SISTEMAS';
+// ✅ DEFINIMOS SOLO LOS ROLES ACTIVOS DEL SISTEMA
+export type UserRole = 'SUPER_ADMIN' | 'COORDINATOR_NAVIGATOR' | 'NAVIGATOR';
 
 export interface User {
-    id_persona: number;
-    nombre_usuario: string;
-    correo: string;
-    rol: UserRole;
-    area?: UserArea; // Nuevo campo opcional
-    estado: "ACTIVO" | "PENDIENTE" | "INACTIVO";
-    foto_url?: string;
-    perfil?: {
-        foto_url?: string;
-    };
+    id: number;
+    name: string;
+    documentNumber: string; 
+    email?: string;         
+    phone?: string;
+    role: UserRole;
+    status: "online" | "offline" | "busy";
+    avatarColor?: string;   
 }
 
 interface UserContextType {
@@ -38,6 +35,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
+    // --- CARGA INICIAL ---
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
@@ -46,68 +44,50 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             try {
                 const parsedUser: User = JSON.parse(storedUser);
                 setToken(storedToken);
-                const fotoUrl = parsedUser.perfil?.foto_url || parsedUser.foto_url || "/img/user.jpg";
-                setUser({ ...parsedUser, foto_url: fotoUrl });
+                
+                // Restauramos estilo visual
+                const userWithStyle = { 
+                    ...parsedUser, 
+                    avatarColor: parsedUser.avatarColor || 'from-slate-700 to-slate-900' 
+                };
+                
+                setUser(userWithStyle);
                 api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
             } catch (e) {
-                console.error("Error parsing stored user data:", e);
+                console.error("Error recuperando sesión:", e);
                 logout();
             }
         }
         setIsLoading(false);
     }, []);
 
+    // --- LOGIN Y REDIRECCIÓN ESTRATÉGICA ---
     const login = (newToken: string, userData: User) => {
-        const fotoUrl = userData.perfil?.foto_url || userData.foto_url || "/img/user.jpg";
-        const userToStore = { ...userData, foto_url: fotoUrl };
-
         localStorage.setItem('token', newToken);
-        localStorage.setItem('user', JSON.stringify(userToStore));
+        localStorage.setItem('user', JSON.stringify(userData));
         setToken(newToken);
-        setUser(userToStore);
+        setUser(userData);
         api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
-        // 🚀 LÓGICA DE REDIRECCIÓN POR ÁREA
-        console.log(`Login: Rol=${userData.rol}, Área=${userData.area}`);
+        console.log(`🔐 Acceso: ${userData.role}`);
 
-        if (userData.estado === 'PENDIENTE') {
-            alert("Cuenta pendiente de aprobación.");
-            logout();
-            return;
-        }
+        // 🚀 LÓGICA DE REDIRECCIÓN (SOLO 2 CAMINOS)
+        switch (userData.role) {
+            // CAMINO A: GESTIÓN Y ADMINISTRACIÓN
+            case 'SUPER_ADMIN':
+            case 'COORDINATOR_NAVIGATOR':
+                router.push('/navegacion/admin'); 
+                break;
 
-        // 1. SI ES JEFE (ADMIN)
-        if (userData.rol === 'ADMIN') {
-            switch (userData.area) {
-                case 'NAVEGACION':
-                    router.push('/navegacion/admin'); // <--- TU OBJETIVO
-                    break;
-                case 'ASISTENCIAL':
-                    router.push('/asistencial/admin');
-                    break;
-                case 'FARMACIA':
-                    router.push('/farmacia/admin');
-                    break;
-                default:
-                    router.push('/admin/reportes'); // Super Admin
-            }
-            return;
-        }
+            // CAMINO B: OPERACIÓN DIARIA
+            case 'NAVIGATOR':
+                router.push('/navegacion/atencion'); 
+                break;
 
-        // 2. SI ES OPERATIVO
-        switch (userData.rol) {
-            case 'MEDICO':
-                router.push('/medico/pacientes');
-                break;
-            case 'NAVEGADOR':
-            case 'GESTOR':
-                router.push('/navegacion/pacientes');
-                break;
-            case 'FARMACEUTICO':
-                router.push('/farmacia/despacho');
-                break;
+            // SI ES UN ROL NO PERMITIDO O VIEJO
             default:
-                router.push('/');
+                alert("Tu rol no tiene acceso al módulo de Navegación.");
+                logout();
         }
     };
 
@@ -123,12 +103,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const refreshUser = async () => {
         if (!token) return;
         try {
-            const response = await api.get('/perfil');
+            const response = await api.get('/users/me'); 
             const fetchedUser: User = response.data;
-            const fotoUrl = fetchedUser.perfil?.foto_url || fetchedUser.foto_url || "/img/user.jpg";
-            const updatedUser = { ...fetchedUser, foto_url: fotoUrl };
-            setUser(updatedUser); 
-            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(fetchedUser); 
+            localStorage.setItem('user', JSON.stringify(fetchedUser));
         } catch (error: any) {
             if (error.response?.status === 401) logout();
         }
@@ -143,6 +121,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
 export const useUser = () => {
     const context = useContext(UserContext);
-    if (context === undefined) throw new Error('useUser must be used within a UserProvider');
+    if (context === undefined) throw new Error('useUser error');
     return context;
 };

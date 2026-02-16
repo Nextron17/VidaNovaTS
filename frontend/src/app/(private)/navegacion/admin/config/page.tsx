@@ -154,7 +154,7 @@ const [newUser, setNewUser] = useState({
       const enhancedTeam = res.data.map((u: any) => ({
         ...u,
         initials: u.name ? u.name.substring(0, 2).toUpperCase() : "U",
-        avatarColor: u.role === 'COORDINATOR' ? 'from-fuchsia-500 to-pink-600' : 'from-slate-500 to-slate-600'
+        avatarColor: u.role === 'COORDINATOR_NAVIGATOR' ? 'from-fuchsia-500 to-pink-600' : 'from-slate-500 to-slate-600'
       }));
       setTeam(enhancedTeam);
     } catch (error) { console.error("Error", error); }
@@ -456,7 +456,7 @@ const [newUser, setNewUser] = useState({
                                       <div>
                                           <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
                                               {member.name}
-                                              {['SUPER_ADMIN', 'COORDINATOR'].includes(member.role) && (
+                                              {['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR'].includes(member.role) && (
                                                   <BadgeCheck size={18} className="text-blue-500" fill="currentColor" color="white"/>
                                               )}
                                           </h3>
@@ -465,7 +465,7 @@ const [newUser, setNewUser] = useState({
                                           {/* Badges de Rol y Estado */}
                                           <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                                               <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border ${
-                                                  ['SUPER_ADMIN', 'COORDINATOR'].includes(member.role) 
+                                                  ['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR'].includes(member.role) 
                                                   ? 'bg-blue-50 text-blue-700 border-blue-100' 
                                                   : 'bg-slate-50 text-slate-600 border-slate-100'
                                               }`}>
@@ -702,8 +702,7 @@ const [newUser, setNewUser] = useState({
                                 onChange={e => setNewUser({...newUser, role: e.target.value})}
                             >
                                 <option value="NAVIGATOR">Navegador Operativo</option>
-                                <option value="COORDINATOR_NAVIGATOR">Coordinador</option> 
-                                <option value="AUDITOR">Auditor</option>
+                                <option value="COORDINATOR_NAVIGATOR">Coordinador Navegador</option> 
                             </select>
                             <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                                 <ChevronRight size={16} className="text-slate-400 rotate-90 group-hover:text-slate-600 transition-colors"/>

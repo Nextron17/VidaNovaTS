@@ -36,7 +36,7 @@ export default function LoginPage() {
       if (["SUPER_ADMIN", "COORDINATOR", "ADMIN"].includes(user.role)) {
         router.push("/navegacion/admin");
       } else {
-        router.push("/navegacion/operativo"); 
+        router.push("/navegacion/atencion"); 
       }
 
     } catch (err: any) {
