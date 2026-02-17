@@ -14,7 +14,6 @@ export const sequelize = new Sequelize({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     logging: false,
-    // 👇 2. AGREGARLO AQUÍ AL ARRAY
     models: [User, Patient, FollowUp], 
     dialectOptions: {
         ssl: process.env.DB_SSL === 'true' ? {
@@ -28,7 +27,7 @@ export const connectDB = async () => {
     try {
         await sequelize.authenticate();
         console.log('✅ Base de datos conectada.');
-        // Sincronizar modelos (crear tablas si no existen)
+        // Sincronizar modelos, crear tablas si no existen y actualizar si hay cambios
         await sequelize.sync({ alter: true });
         console.log('✅ Modelos sincronizados.');
     } catch (error) {

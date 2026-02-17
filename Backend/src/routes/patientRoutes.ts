@@ -10,34 +10,33 @@ const upload = multer({ storage: multer.memoryStorage() });
 // 1. Todos deben estar logueados
 router.use(authenticate);
 
-// --- DEFINICIÓN DE PERMISOS ---
+//  DEFINICIÓN DE PERMISOS 
 
-// A. Jefes (Acceso Total: Borrar, Auditar, Reparar)
+// A. Jefes 
 const BOSS_ROLES = ['COORDINATOR_NAVIGATOR', 'SUPER_ADMIN'];
 
-// B. Operativos (Acceso Diario: Crear, Editar, Importar)
-// Incluye a los jefes porque ellos también pueden operar si quieren
+// B. Operativos y Jefes
 const OPERATIVE_ROLES = ['NAVIGATOR', ...BOSS_ROLES];
 
 
-// --- RUTAS DE CUPS (Configuración del sistema) ---
+//  RUTAS DE CUPS
 
 // Ver listado lo hacen todos
 router.get('/cups', authorize(OPERATIVE_ROLES), PatientController.getCups);
-// Actualizar masivamente CUPS es delicado -> Jefes
+// Actualizar masivamente CUPS es delicado
 router.put('/cups/bulk-update', authorize(BOSS_ROLES), PatientController.bulkUpdateCups);
-// Sincronizar CUPS -> Operativo (a veces necesario al importar)
+// Sincronizar CUPS
 router.post('/cups/sync', authorize(OPERATIVE_ROLES), PatientController.syncCups);
-// Reparar categorías (Mantenimiento) -> Solo Jefes
+// Reparar categorías 
 router.post('/fix-categories', authorize(BOSS_ROLES), CupsController.fixLegacyCategories);
 
 
-// --- RUTAS DE PACIENTES (Core) ---
+//  RUTAS DE PACIENTES
 
-// 1. Lectura y Listados (Todos)
+// 1. Lectura y Listados
 router.get('/', authorize(OPERATIVE_ROLES), PatientController.getPatients);
 
-// 2. Importación y Creación (El Navegador SÍ puede hacer esto)
+// 2. Importación y Creación 
 router.post('/upload', [
     authorize(OPERATIVE_ROLES),
     upload.single('archivo')
@@ -45,21 +44,21 @@ router.post('/upload', [
 
 router.post('/', authorize(OPERATIVE_ROLES), PatientController.createPatient);
 
-// 3. Edición y Actualización Masiva (El Navegador SÍ puede hacer esto)
+// 3. Edición y Actualización Masiva 
 router.put('/bulk-update', authorize(OPERATIVE_ROLES), PatientController.bulkUpdate);
 router.put('/:id', authorize(OPERATIVE_ROLES), PatientController.updatePatient);
 
 
-// --- RUTAS ESTRATÉGICAS Y DESTRUCTIVAS (Aquí bloqueamos al Navegador) ---
+//  RUTAS ESTRATÉGICAS Y DESTRUCTIVAS
 
-// ⛔ Auditoría y Estadísticas (User dijo: "ni ver estadisticas")
+//  Auditoría y Estadísticas 
 router.get('/audit', authorize(BOSS_ROLES), PatientController.getAuditStats);
 
-// ⛔ Eliminar Paciente (User dijo: "no eliminar")
+//  Eliminar Paciente (
 router.delete('/:id', authorize(BOSS_ROLES), PatientController.deletePatient);
 
 
-// --- DETALLE INDIVIDUAL (Al final) ---
+//  DETALLE INDIVIDUAL
 router.get('/:id', authorize(OPERATIVE_ROLES), PatientController.getPatientById);
 
 export default router;

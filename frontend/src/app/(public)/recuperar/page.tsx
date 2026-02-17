@@ -1,109 +1,125 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import Link from "next/link";
-import { User, ArrowLeft, Loader2, CheckCircle2, AlertCircle, ShieldQuestion } from "lucide-react";
-import api from "@/src/app/services/api";
+import { useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft, User, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import api from '@/src/app/services/api';
 
-export default function RecuperarPage() {
-  const [documento, setDocumento] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<"form" | "success">("form");
-  const [error, setError] = useState("");
+export default function RecoverPasswordPage() {
+  const [documentNumber, setDocumentNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError("");
+    setLoading(true);
+    setError('');
 
     try {
-      // ✅ Enviamos el documento al backend en lugar del correo
-      await api.post("/auth/forgot-password", { documentNumber: documento });
-      setStep("success");
+      // 🔥 CAMBIO CRÍTICO: Ahora enviamos 'documentNumber'
+      // Esto coincide con tu AuthController.forgotPassword
+      await api.post('/auth/forgot-password', { documentNumber });
+      setSuccess(true);
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.message || "No pudimos procesar la solicitud. Verifica el número de documento.");
+      setError(
+        err.response?.data?.error || 
+        'No se pudo procesar la solicitud. Verifica el documento.'
+      );
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
-      <div className="bg-white max-w-md w-full rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 md:p-12 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
         
-        {/* Barra decorativa superior */}
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-blue-400"></div>
+        {/* Header Azul */}
+        <div className="bg-blue-600 p-6 text-center">
+          <h2 className="text-xl font-bold text-white">Recuperar Acceso</h2>
+          <p className="text-blue-100 text-sm mt-1">
+            Ingresa tu documento para restablecer la contraseña
+          </p>
+        </div>
 
-        {step === "form" && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="mb-8">
-              <Link href="/login" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors mb-8 group">
-                <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform"/> Volver al Acceso
-              </Link>
-              
-              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
-                <ShieldQuestion size={28}/>
+        <div className="p-8">
+          {success ? (
+            // ESTADO DE ÉXITO
+            <div className="text-center space-y-4">
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
-              
-              <h1 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">¿Olvidaste tu acceso?</h1>
-              <p className="text-slate-500 text-sm leading-relaxed">
-                Ingresa tu <strong>Número de Documento</strong> registrado para recibir las instrucciones de restablecimiento.
+              <h3 className="text-lg font-semibold text-slate-800">¡Solicitud Enviada!</h3>
+              <p className="text-slate-600 text-sm">
+                Si el documento <b>{documentNumber}</b> tiene un correo asociado, recibirás las instrucciones allí en breve.
               </p>
+              <Link 
+                href="/login" 
+                className="inline-block mt-4 text-blue-600 font-medium hover:underline"
+              >
+                Volver al inicio de sesión
+              </Link>
             </div>
-
+          ) : (
+            // FORMULARIO DE RECUPERACIÓN
             <form onSubmit={handleSubmit} className="space-y-6">
+              
               {error && (
-                <div className="p-4 bg-red-50 text-red-600 text-xs font-bold rounded-2xl flex items-center gap-3 animate-in shake duration-300">
-                  <AlertCircle size={18}/> {error}
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Documento de Identidad</label>
-                <div className="relative group">
-                  <User className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20}/>
-                  <input 
-                    type="text" 
-                    placeholder="Escribe tu cédula"
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 transition-all"
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Número de Documento
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    {/* Cambiamos el icono Mail por User para que tenga sentido visual */}
+                    <User className="h-5 w-5 text-slate-400" />
+                  </div>
+                  <input
+                    type="text" // Cambiado de 'email' a 'text'
                     required
-                    value={documento}
-                    onChange={(e) => setDocumento(e.target.value)}
+                    value={documentNumber}
+                    onChange={(e) => setDocumentNumber(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    placeholder="Ej: 1061000000"
                   />
                 </div>
               </div>
 
-              <button 
-                type="submit" 
-                disabled={isLoading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-slate-200 active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-70"
+              <button
+                type="submit"
+                disabled={loading || !documentNumber}
+                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {isLoading ? <Loader2 className="animate-spin" size={20}/> : "Validar Identidad"}
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="animate-spin h-4 w-4" />
+                    <span>Procesando...</span>
+                  </div>
+                ) : (
+                  'Enviar Instrucciones'
+                )}
               </button>
+
+              <div className="text-center">
+                <Link 
+                  href="/login" 
+                  className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  <ArrowLeft size={14} />
+                  Volver al Login
+                </Link>
+              </div>
             </form>
-          </div>
-        )}
-
-        {step === "success" && (
-          <div className="text-center animate-in zoom-in-95 duration-500">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-              <CheckCircle2 size={40}/>
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Solicitud Recibida</h2>
-            <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-              Si el documento <strong>{documento}</strong> está registrado, se han enviado instrucciones al correo asociado a tu cuenta.
-            </p>
-            
-            <Link 
-              href="/login"
-              className="block w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-black py-4 rounded-2xl transition-all uppercase text-xs tracking-widest"
-            >
-              Regresar al inicio
-            </Link>
-          </div>
-        )}
-
+          )}
+        </div>
       </div>
     </div>
   );

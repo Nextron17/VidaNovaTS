@@ -5,7 +5,7 @@ import { authenticate, authorize } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// --- ZONA COMÚN (Todos los logueados) ---
+//  ZONA COMÚN (Todos los logueados) 
 router.use(authenticate);
 
 // 1. RUTAS PERSONALES (Cualquiera puede editar su propio perfil)
@@ -14,9 +14,9 @@ router.put('/me', UserController.updateProfile);
 router.put('/me/password', UserController.changePassword);
 
 
-// --- ZONA ADMIN (Gestión de Equipos) ---
+//  ZONA ADMIN 
 
-// ⛔ Solo Jefes (El Navegador NO está aquí)
+// Solo Jefes
 const BOSS_ROLES = ['COORDINATOR_NAVIGATOR', 'SUPER_ADMIN'];
 
 // Obtener lista de usuarios
@@ -28,7 +28,6 @@ router.get('/',
 // Crear nuevo usuario
 router.post('/', [
     authorize(BOSS_ROLES),
-    // Validaciones
     body('documentNumber').notEmpty().withMessage('El documento es obligatorio'),
     body('name').notEmpty().withMessage('El nombre es obligatorio'),
     body('email').optional({ checkFalsy: true }).isEmail().withMessage('Formato inválido'),

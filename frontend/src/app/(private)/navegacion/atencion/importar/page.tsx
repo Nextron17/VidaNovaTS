@@ -5,15 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, FileText, Info, Loader2 // Importamos Loader2 para el spinner
+  AlertCircle, FileText, Info, Loader2 
 } from "lucide-react";
-import api from "@/src/app/services/api"; // ✅ Importamos tu cliente API
+import api from "@/src/app/services/api";
 
-export default function ImportarDataPage() {
+export default function ImportarDataAtencionPage() {
   const [isClient, setIsClient] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false); // ✅ Estado de carga
+  const [uploading, setUploading] = useState(false);
   const router = useRouter();
 
   useEffect(() => { setIsClient(true); }, []);
@@ -42,33 +42,30 @@ export default function ImportarDataPage() {
     }
   };
 
-  // --- 🚀 LÓGICA DE SUBIDA AL BACKEND ---
+  // --- 🚀 LÓGICA DE SUBIDA ---
   const handleUpload = async () => {
     if (!file) return;
 
     setUploading(true);
     const formData = new FormData();
-    formData.append("archivo", file); // 'archivo' debe coincidir con el backend (upload.single('archivo'))
+    formData.append("archivo", file); 
 
     try {
-      // Petición al endpoint que creamos: /api/patients/upload
       const res = await api.post("/patients/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
       const stats = res.data.details;
       
-      // Mensaje de éxito
-      alert(`✅ ¡Proceso Exitoso!\n\n📄 Total filas: ${stats.total}\n🆕 Nuevos pacientes: ${stats.created}\n🔄 Actualizados: ${stats.updated}`);
+      alert(`✅ ¡Importación Finalizada!\n\n📄 Filas procesadas: ${stats.total}\n🆕 Nuevos ingresos: ${stats.created}\n🔄 Registros actualizados: ${stats.updated}`);
       
-      // Opcional: Redirigir a la lista de pacientes o limpiar
       setFile(null);
-      // router.push("/navegacion/admin"); // Descomentar si quieres redirigir
+      router.push("/navegacion/atencion/directorio"); 
 
     } catch (error: any) {
       console.error("Error subiendo archivo:", error);
-      const msg = error.response?.data?.error || "Error de conexión al procesar el archivo.";
-      alert(`❌ Ocurrió un error:\n${msg}`);
+      const msg = error.response?.data?.error || "Error de red al procesar el archivo Excel.";
+      alert(`❌ Error en la carga:\n${msg}`);
     } finally {
       setUploading(false);
     }
@@ -77,41 +74,48 @@ export default function ImportarDataPage() {
   if (!isClient) return null;
 
   return (
-    <div className="w-full max-w-4xl mx-auto font-sans text-slate-800 pb-24 bg-white p-8">
+    <div className="w-full max-w-5xl mx-auto font-sans text-slate-800 pb-24 p-6 md:p-10">
       
-      {/* 1. HEADER SIMPLE */}
-      <div className="flex items-center gap-3 mb-8 border-b border-slate-100 pb-4">
-        <Link href="/navegacion/admin" className="p-2 -ml-2 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-600 transition-colors">
-            <ArrowLeft size={20}/>
+      {/* 1. HEADER OPERATIVO */}
+      <div className="flex items-center gap-4 mb-10 border-b border-slate-100 pb-6">
+        <Link href="/navegacion/atencion/directorio" className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm group">
+            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform"/>
         </Link>
         <div>
-            <h1 className="text-2xl font-black text-slate-900">Carga Masiva</h1>
-            <p className="text-slate-500 text-sm">Actualización de base de datos de pacientes.</p>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Carga Masiva</h1>
+            <p className="text-slate-500 font-medium text-sm">Importación masiva de expedientes desde Excel o CSV.</p>
         </div>
       </div>
 
-      {/* 2. ZONA DE CARGA (CARD PRINCIPAL) */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
-        <div className="bg-blue-600 p-6 text-white text-center">
-            <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
-                <UploadCloud size={32} />
+      {/* 2. ZONA DE CARGA (EMERALD STYLE) */}
+      <div className="bg-white border border-slate-100 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 overflow-hidden mb-10 transition-all">
+        <div className="bg-emerald-600 p-8 text-white text-center relative overflow-hidden">
+            {/* Decoración de fondo */}
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+                <FileSpreadsheet size={120} />
             </div>
-            <h2 className="text-lg font-bold">Sube tu archivo aquí</h2>
-            <p className="text-blue-100 text-sm opacity-90">Formatos aceptados: .xlsx (Excel) o .csv</p>
+            
+            <div className="relative z-10">
+                <div className="mx-auto w-20 h-20 bg-white/20 rounded-[2rem] flex items-center justify-center mb-5 backdrop-blur-md shadow-inner">
+                    <UploadCloud size={40} />
+                </div>
+                <h2 className="text-xl font-black uppercase tracking-widest">Sincronización de Datos</h2>
+                <p className="text-emerald-100 text-sm font-medium mt-2">Arrastra el archivo maestro de navegación aquí.</p>
+            </div>
         </div>
 
-        <div className="p-8">
+        <div className="p-10">
             <div 
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={`
-                    border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 cursor-pointer
+                    border-2 border-dashed rounded-[2rem] p-12 text-center transition-all duration-500 cursor-pointer
                     ${isDragging 
-                        ? 'border-blue-500 bg-blue-50 scale-[1.02]' 
+                        ? 'border-emerald-500 bg-emerald-50 scale-[1.01] shadow-lg' 
                         : file 
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                            ? 'border-emerald-500 bg-emerald-50/50 shadow-inner'
+                            : 'border-slate-200 hover:border-emerald-400 hover:bg-slate-50 shadow-sm'
                     }
                 `}
             >
@@ -121,43 +125,52 @@ export default function ImportarDataPage() {
                     className="hidden" 
                     accept=".xlsx,.xls,.csv"
                     onChange={handleFileChange}
-                    disabled={uploading} // Bloquear si está subiendo
+                    disabled={uploading}
                 />
                 
                 <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
                     {file ? (
-                        <>
-                            <FileSpreadsheet size={48} className="text-green-600 mb-3 animate-in zoom-in duration-300"/>
-                            <h3 className="text-lg font-bold text-green-700">{file.name}</h3>
-                            <p className="text-sm text-green-600">{(file.size / 1024).toFixed(2)} KB • Listo para procesar</p>
-                        </>
+                        <div className="animate-in zoom-in duration-500">
+                            <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-sm">
+                                <FileSpreadsheet size={40}/>
+                            </div>
+                            <h3 className="text-xl font-black text-emerald-900 uppercase tracking-tight">{file.name}</h3>
+                            <p className="text-sm font-bold text-emerald-600 mt-1 uppercase tracking-widest">
+                                {(file.size / 1024).toFixed(2)} KB • Preparado para proceso
+                            </p>
+                        </div>
                     ) : (
                         <>
-                            <FileText size={48} className="text-slate-300 mb-3"/>
-                            <h3 className="text-base font-bold text-slate-700">Arrastra tu archivo o haz clic para buscar</h3>
-                            <p className="text-xs text-slate-400 mt-2">El sistema detectará duplicados automáticamente.</p>
+                            <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 text-slate-300">
+                                <FileText size={40}/>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-700 uppercase tracking-tight">Seleccionar archivo local</h3>
+                            <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest leading-loose">
+                                .xlsx, .xls o .csv admitidos <br/>
+                                <span className="text-emerald-500">Detección inteligente de duplicados activada</span>
+                            </p>
                         </>
                     )}
                 </label>
             </div>
 
-            {/* Acciones */}
-            <div className="flex justify-center mt-8 gap-4">
-                <Link href="/navegacion/admin" className={`px-6 py-3 rounded-full border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors ${uploading ? 'pointer-events-none opacity-50' : ''}`}>
-                    Cancelar
+            {/* Acciones de Control */}
+            <div className="flex flex-col sm:flex-row justify-center mt-10 gap-4">
+                <Link href="/navegacion/atencion/directorio" className={`px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all text-center ${uploading ? 'pointer-events-none opacity-50' : ''}`}>
+                    Regresar
                 </Link>
                 <button 
-                    onClick={handleUpload} // ✅ Conectado a la función real
+                    onClick={handleUpload}
                     disabled={!file || uploading}
-                    className="px-8 py-3 rounded-full bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                    className="px-12 py-4 rounded-2xl bg-emerald-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-emerald-200 hover:bg-slate-900 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
                 >
                     {uploading ? (
                         <>
-                            <Loader2 size={18} className="animate-spin"/> Procesando...
+                            <Loader2 size={18} className="animate-spin text-white"/> PROCESANDO...
                         </>
                     ) : (
                         <>
-                            <UploadCloud size={18}/> Procesar Archivo
+                            <UploadCloud size={18}/> Iniciar Carga Masiva
                         </>
                     )}
                 </button>
@@ -165,28 +178,31 @@ export default function ImportarDataPage() {
         </div>
       </div>
 
-      {/* 3. GUÍA DE AYUDA (COLUMNAS) */}
-      <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-        <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Info size={18} className="text-blue-500"/> Estructura Recomendada
-        </h4>
+      {/* 3. GUÍA DE ESTRUCTURA (EMERALD ACCENTS) */}
+      <div className="bg-slate-900 rounded-[2rem] p-8 border border-slate-800 shadow-2xl shadow-slate-900/20">
+        <div className="flex items-center gap-3 mb-8">
+            <div className="w-8 h-8 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center">
+                <Info size={18}/>
+            </div>
+            <h4 className="font-black text-white uppercase tracking-widest text-sm">Protocolo de Importación</h4>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm text-slate-600">
-            <ColumnItem label="Identificación (Cédula)" required />
-            <ColumnItem label="Nombre Completo (o Nombres / Apellidos)" required />
-            <ColumnItem label="Teléfono / Celular" />
-            <ColumnItem label="Correo Electrónico" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3">
+            <ColumnItem label="Cédula / ID" required />
+            <ColumnItem label="Nombres y Apellidos" required />
+            <ColumnItem label="Teléfono de Contacto" />
+            <ColumnItem label="EPS o Aseguradora" />
             
-            <ColumnItem label="EPS / Aseguradora" />
-            <ColumnItem label="Fecha Nacimiento / Edad" />
-            <ColumnItem label="Dirección / Ciudad" />
+            <ColumnItem label="Email de Paciente" />
+            <ColumnItem label="Fecha de Nacimiento" />
+            <ColumnItem label="Ciudad de Residencia" />
             <ColumnItem label="Género" />
         </div>
 
-        <div className="mt-6 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800 flex gap-3 items-start">
-            <div className="mt-0.5"><CheckCircle2 size={14}/></div>
-            <div>
-                <strong>Lógica Inteligente:</strong> Si subes un paciente que ya existe, el sistema actualizará sus datos (ej. si el nuevo archivo trae el teléfono actualizado). No duplica registros.
+        <div className="mt-10 p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex gap-4 items-start animate-pulse">
+            <div className="mt-1 text-emerald-500"><CheckCircle2 size={18}/></div>
+            <div className="text-xs font-medium text-emerald-100/70 leading-relaxed">
+                <strong className="text-emerald-400 uppercase tracking-widest">Validación de Integridad:</strong> Si un paciente ya existe bajo el mismo número de documento, el sistema actualizará automáticamente su información demográfica sin perder el histórico de citas.
             </div>
         </div>
       </div>
@@ -198,16 +214,20 @@ export default function ImportarDataPage() {
 // --- COMPONENTE AUXILIAR ---
 function ColumnItem({ label, required }: { label: string, required?: boolean }) {
     return (
-        <div className="flex items-center gap-2 py-1.5 border-b border-slate-200/50 last:border-0">
+        <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0 group">
             {required ? (
-                <CheckCircle2 size={14} className="text-green-500 flex-shrink-0"/>
+                <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0"/>
             ) : (
-                <AlertCircle size={14} className="text-slate-400 flex-shrink-0"/>
+                <div className="w-4 h-4 rounded-full border border-slate-700 flex-shrink-0"></div>
             )}
-            <span className={required ? "font-semibold text-slate-700" : "text-slate-500"}>
+            <span className={`text-xs uppercase tracking-tight ${required ? "font-black text-slate-200" : "font-bold text-slate-500"}`}>
                 {label}
             </span>
-            {required && <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-600 font-bold ml-auto">Req</span>}
+            {required && (
+                <span className="text-[8px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full ml-auto uppercase tracking-tighter border border-emerald-500/20">
+                    Crítico
+                </span>
+            )}
         </div>
     );
 }

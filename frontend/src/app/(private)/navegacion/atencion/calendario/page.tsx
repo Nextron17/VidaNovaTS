@@ -23,7 +23,9 @@ import {
   MapPin,
   Phone,
   Mail,
-  Filter
+  Filter,
+  Zap,
+  Target
 } from "lucide-react";
 import api from "@/src/app/services/api";
 
@@ -41,7 +43,7 @@ interface CalendarEvent {
     borderColor: string;
     textColor: string;
     classNames?: string[];
-    color?: string; // Importante para la vista de Lista
+    color?: string; 
     extendedProps: {
         type: EventType;
         patientId?: string;
@@ -56,16 +58,14 @@ interface CalendarEvent {
     };
 }
 
-// --- CONFIGURACIÓN DE ESTILOS "GORDA" ---
-// hex: Color para los puntos de FullCalendar (Vista Lista)
-// bg/border/text: Clases de Tailwind para las tarjetas personalizadas
+// --- CONFIGURACIÓN DE ESTILOS (Sintonía Esmeralda) ---
 const EVENT_STYLES: { [key: string]: { bg: string, border: string, text: string, icon: any, label: string, hex: string } } = {
-    'CONSULTA':      { bg: 'bg-blue-50',      border: 'border-blue-600',    text: 'text-blue-800',    icon: Stethoscope, label: 'Consulta',      hex: '#2563eb' }, 
-    'QUIMIOTERAPIA': { bg: 'bg-purple-50',    border: 'border-purple-600',  text: 'text-purple-800',  icon: Activity,    label: 'Quimioterapia', hex: '#9333ea' }, 
-    'RADIOTERAPIA':  { bg: 'bg-orange-50',    border: 'border-orange-600',  text: 'text-orange-800',  icon: Activity,    label: 'Radioterapia',  hex: '#ea580c' },   
+    'CONSULTA':      { bg: 'bg-emerald-50',   border: 'border-emerald-600', text: 'text-emerald-800', icon: Stethoscope, label: 'Consulta',      hex: '#10b981' }, 
+    'QUIMIOTERAPIA': { bg: 'bg-teal-50',      border: 'border-teal-600',    text: 'text-teal-800',    icon: Activity,    label: 'Quimioterapia', hex: '#0d9488' }, 
+    'RADIOTERAPIA':  { bg: 'bg-cyan-50',      border: 'border-cyan-600',    text: 'text-cyan-800',    icon: Zap,         label: 'Radioterapia',  hex: '#0891b2' },   
     'CIRUGIA':       { bg: 'bg-rose-50',      border: 'border-rose-600',    text: 'text-rose-800',    icon: Activity,    label: 'Cirugía',       hex: '#e11d48' },          
-    'IMAGEN':        { bg: 'bg-emerald-50',   border: 'border-emerald-600', text: 'text-emerald-800', icon: FileText,    label: 'Imágenes',      hex: '#059669' },           
-    'LABORATORIO':   { bg: 'bg-cyan-50',      border: 'border-cyan-600',    text: 'text-cyan-800',    icon: FileText,    label: 'Laboratorio',   hex: '#0891b2' },   
+    'IMAGEN':        { bg: 'bg-indigo-50',    border: 'border-indigo-600',  text: 'text-indigo-800',  icon: FileText,    label: 'Imágenes',      hex: '#4f46e5' },           
+    'LABORATORIO':   { bg: 'bg-blue-50',      border: 'border-blue-600',    text: 'text-blue-800',    icon: FileText,    label: 'Laboratorio',   hex: '#2563eb' },   
     'OTROS':         { bg: 'bg-slate-50',     border: 'border-slate-600',   text: 'text-slate-800',   icon: CalendarIcon,label: 'Otros',         hex: '#475569' }                
 };
 
@@ -76,7 +76,7 @@ const STATUS_STYLES: { [key in EventStatus]: { color: string, bg: string, icon: 
     'CANCELADO': { color: 'text-rose-600', bg: 'bg-rose-100', icon: X, label: 'Cancelado' }
 };
 
-export default function AgendaPage() {
+export default function AgendaAtencionPage() {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
   
@@ -86,18 +86,16 @@ export default function AgendaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => { setIsClient(true); }, []);
 
-  // --- CARGA DE DATOS ---
   const fetchEvents = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
     try {
         const res = await api.get('/patients', {
             params: {
-                page: 1, limit: 3000, 
+                page: 1, limit: 1000, 
                 startDate: start.toISOString(), 
                 endDate: end.toISOString()
             }
@@ -108,7 +106,6 @@ export default function AgendaPage() {
             (res.data.data || []).forEach((p: any) => {
                 if (p.followups?.length > 0) {
                     p.followups.forEach((f: any) => {
-                        // 1. Normalización de Categorías (Evita "Otros" innecesarios)
                         let typeKey = (f.category || 'OTROS').toUpperCase().trim();
                         if (typeKey.includes('IMAGEN')) typeKey = 'IMAGEN';
                         if (typeKey.includes('QUIMIO')) typeKey = 'QUIMIOTERAPIA';
@@ -117,10 +114,8 @@ export default function AgendaPage() {
                         if (typeKey.includes('LAB')) typeKey = 'LABORATORIO';
                         if (!EVENT_STYLES[typeKey]) typeKey = 'OTROS';
 
-                        // 2. Obtener estilos
                         const style = EVENT_STYLES[typeKey];
                         const eventDate = f.dateAppointment ? f.dateAppointment : f.dateRequest;
-                        
                         if (!eventDate) return;
 
                         const dateObj = new Date(eventDate);
@@ -134,18 +129,16 @@ export default function AgendaPage() {
                             start: eventDate,
                             end: isAllDay ? undefined : endDateObj.toISOString(),
                             allDay: isAllDay,
-                            // Transparente para usar nuestro render personalizado
                             backgroundColor: 'transparent', 
                             borderColor: 'transparent',
-                            textColor: '#1e293b',
-                            // Color real para la vista de Lista
+                            textColor: '#064e3b',
                             color: style.hex, 
                             classNames: ['cursor-pointer'],
                             extendedProps: {
                                 type: typeKey as EventType,
                                 patientId: p.id,
                                 patientName: `${p.firstName} ${p.lastName}`,
-                                serviceName: f.serviceName || 'Servicio no especificado',
+                                serviceName: f.serviceName || f.cups || 'Trámite de Navegación',
                                 status: (f.status || 'PENDIENTE') as EventStatus,
                                 description: f.observation,
                                 cups: f.cups,
@@ -171,7 +164,6 @@ export default function AgendaPage() {
       fetchEvents(dateInfo.start, dateInfo.end);
   };
 
-  // --- FILTROS ---
   const filteredEvents = useMemo(() => {
       return events.filter(evt => {
           const matchType = selectedTypes.includes(evt.extendedProps.type);
@@ -206,55 +198,50 @@ export default function AgendaPage() {
   return (
     <div className="flex w-full h-screen bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
       
-      {/* ================= SIDEBAR (Filtros y Panel) ================= */}
+      {/* ================= SIDEBAR OPERATIVO ================= */}
       <aside className="hidden md:flex w-80 bg-white border-r border-slate-200 flex-col shrink-0 z-20 shadow-lg h-full">
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3 shrink-0">
-            <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-600/20">
+        <div className="p-6 border-b border-slate-100 flex items-center gap-3 shrink-0 bg-emerald-600/5">
+            <div className="bg-emerald-600 p-2.5 rounded-xl text-white shadow-xl shadow-emerald-200">
                 <CalendarIcon size={22} strokeWidth={2.5}/>
             </div>
             <div>
-                <h1 className="text-lg font-black tracking-tight text-slate-900 leading-none">Agenda Médica</h1>
-                <p className="text-xs text-slate-400 font-medium mt-1">Gestión de citas</p>
+                <h1 className="text-lg font-black tracking-tight text-slate-900 leading-none">Mi Agenda</h1>
+                <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1">Modo Operativo</p>
             </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-            {/* Buscador */}
+            {/* Buscador de Navegación */}
             <div className="relative group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
                 <input 
                     type="text" 
-                    placeholder="Buscar paciente o servicio..." 
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none placeholder:text-slate-400"
+                    placeholder="Buscar en agenda..." 
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
 
-            {/* Mini Dashboard */}
-            <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <Activity size={12}/> Métricas del Mes
+            {/* Métricas de Navegador */}
+            <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-2xl">
+                <h3 className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Target size={12}/> Rendimiento de Hoy
                 </h3>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center hover:border-blue-200 transition-colors">
-                        <span className="block text-2xl font-black text-slate-800">{filteredEvents.length}</span>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Total Citas</span>
-                    </div>
-                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
-                        <span className="block text-2xl font-black text-emerald-600">
-                            {filteredEvents.filter(e => e.extendedProps.status === 'REALIZADO').length}
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-600/70 uppercase">Atendidos</span>
-                    </div>
+                <div className="flex items-end justify-between mb-2">
+                    <span className="text-3xl font-black">{filteredEvents.length}</span>
+                    <span className="text-xs font-bold text-slate-400">Total citas</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 w-[65%] rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
                 </div>
             </div>
 
-            {/* Filtros Categorías (CON COLORES REALES) */}
+            {/* Categorías Clínicas */}
             <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex justify-between items-center">
-                    <span className="flex items-center gap-2"><Filter size={12}/> Categorías</span>
-                    <button onClick={() => setSelectedTypes(Object.keys(EVENT_STYLES))} className="text-[9px] text-blue-600 hover:underline">Ver todas</button>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex justify-between items-center">
+                    <span><Filter size={12} className="inline mr-1"/> Categorías</span>
+                    <button onClick={() => setSelectedTypes(Object.keys(EVENT_STYLES))} className="text-emerald-600 hover:underline">Ver todas</button>
                 </h3>
                 <div className="flex flex-col gap-2">
                     {Object.keys(EVENT_STYLES).map((type) => {
@@ -264,15 +251,11 @@ export default function AgendaPage() {
                             <button
                                 key={type}
                                 onClick={() => toggleType(type)}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold border transition-all duration-200 w-full text-left group ${isActive ? `bg-white border-slate-200 text-slate-700 shadow-sm ring-1 ring-slate-100` : 'bg-transparent border-transparent text-slate-400 hover:bg-slate-50'}`}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-black border transition-all duration-200 w-full text-left group ${isActive ? `bg-white border-slate-200 text-slate-700 shadow-md` : 'bg-transparent border-transparent text-slate-400 hover:bg-emerald-50/50'}`}
                             >
-                                {/* Indicador de Color (HEX) */}
-                                <div 
-                                    className={`w-2.5 h-2.5 rounded-full shadow-sm ring-2 ring-white transition-transform ${isActive ? 'scale-110' : 'grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100'}`} 
-                                    style={{ backgroundColor: style.hex }}
-                                ></div>
-                                <span className="flex-1">{style.label}</span>
-                                {isActive && <CheckCircle2 size={14} className="text-blue-500"/>}
+                                <div className="w-2.5 h-2.5 rounded-full shadow-sm ring-4 ring-slate-50 transition-transform" style={{ backgroundColor: style.hex }}></div>
+                                <span className="flex-1 uppercase tracking-tight">{style.label}</span>
+                                {isActive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>}
                             </button>
                         );
                     })}
@@ -282,26 +265,25 @@ export default function AgendaPage() {
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/50 shrink-0">
             <button 
-                onClick={() => router.push('/navegacion/admin/pacientes')}
-                className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg shadow-slate-900/10 hover:bg-blue-600 hover:shadow-blue-600/20 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                onClick={() => router.push('/navegacion/atencion/directorio')}
+                className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
-                <Plus size={18}/> Nueva Cita
+                <Plus size={18}/> Agendar Paciente
             </button>
         </div>
       </aside>
 
-      {/* ================= AREA PRINCIPAL (Calendario) ================= */}
+      {/* ================= ÁREA DE CALENDARIO ================= */}
       <main className="flex-1 flex flex-col h-full min-w-0 relative bg-white">
-        
         {loading && (
-            <div className="absolute top-4 right-4 z-50 bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-slate-100 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 pointer-events-none">
-                <Loader2 className="animate-spin text-blue-600" size={16}/>
-                <span className="text-xs font-bold text-slate-600">Sincronizando...</span>
+            <div className="absolute top-6 right-6 z-50 bg-white/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-xl border border-slate-100 flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+                <Loader2 className="animate-spin text-emerald-600" size={18}/>
+                <span className="text-xs font-black text-slate-900 tracking-widest uppercase">Sincronizando...</span>
             </div>
         )}
 
-        <div className="flex-1 p-4 md:p-6 overflow-hidden">
-            <div className="h-full w-full bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden p-1">
+        <div className="flex-1 p-6 overflow-hidden">
+            <div className="h-full w-full bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden p-2">
                 <FullCalendar
                     plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
                     initialView="dayGridMonth"
@@ -312,50 +294,38 @@ export default function AgendaPage() {
                         center: 'title',
                         right: 'dayGridMonth,timeGridWeek,listWeek'
                     }}
-                    buttonText={{ today: 'Hoy', month: 'Mes', week: 'Semana', list: 'Lista' }}
                     events={filteredEvents}
                     eventClick={handleEventClick}
-                    
-                    // Ajustes de Visualización
                     height="100%"
-                    dayMaxEvents={false} 
-                    stickyHeaderDates={true} 
-                    expandRows={true}
+                    dayMaxEvents={3}
                     slotMinTime="06:00:00"
                     slotMaxTime="20:00:00"
                     allDaySlot={false}
                     navLinks={true}
-                    
-                    // 🔥 RENDERIZADO PERSONALIZADO (Tarjetas)
                     eventContent={(eventInfo) => {
                         const type = eventInfo.event.extendedProps.type;
                         const style = EVENT_STYLES[type] || EVENT_STYLES['OTROS'];
-                        const isWeekView = eventInfo.view.type === 'timeGridWeek';
-
-                        // Render para vista de LISTA (FullCalendar usa dot por defecto, pero podemos personalizar si queremos)
+                        
                         if (eventInfo.view.type === 'listWeek') {
                              return (
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-slate-700">{eventInfo.event.title}</span>
-                                    <span className="text-xs text-slate-500">{eventInfo.event.extendedProps.serviceName}</span>
+                                <div className="flex flex-col py-1">
+                                    <span className="font-black text-slate-800 uppercase text-[11px]">{eventInfo.event.title}</span>
+                                    <span className="text-[10px] font-bold text-emerald-600">{eventInfo.event.extendedProps.serviceName}</span>
                                 </div>
-                             )
+                             );
                         }
 
-                        // Render para Mes/Semana
                         return (
-                            <div className={`w-full h-full px-2 py-1 flex flex-col justify-center ${style.bg} border-l-[4px] ${style.border} hover:brightness-95 transition-all cursor-pointer rounded-r-md overflow-hidden shadow-sm`}>
-                                <div className="flex items-center justify-between gap-1 leading-none mb-0.5">
-                                    <span className={`text-[9px] font-extrabold ${style.text} opacity-80 whitespace-nowrap bg-white/50 px-1 py-0.5 rounded`}>
+                            <div className={`w-full h-full px-2 py-1.5 flex flex-col justify-center ${style.bg} border-l-[4px] ${style.border} hover:scale-[1.02] transition-all cursor-pointer rounded-r-xl overflow-hidden shadow-sm`}>
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className={`text-[8px] font-black ${style.text} bg-white/60 px-1.5 py-0.5 rounded-lg uppercase`}>
                                         {eventInfo.timeText}
                                     </span>
                                 </div>
-                                
-                                <div className={`text-[10px] md:text-xs font-bold ${style.text} truncate leading-tight mt-0.5`}>
+                                <div className={`text-[10px] font-black ${style.text} truncate uppercase tracking-tighter`}>
                                     {eventInfo.event.title}
                                 </div>
-
-                                <div className={`text-[9px] text-slate-500 truncate leading-tight mt-0.5 ${isWeekView ? 'line-clamp-2 whitespace-normal' : ''}`}>
+                                <div className={`text-[8px] font-bold text-slate-500 truncate`}>
                                     {eventInfo.event.extendedProps.serviceName}
                                 </div>
                             </div>
@@ -366,116 +336,92 @@ export default function AgendaPage() {
         </div>
       </main>
 
-      {/* ================= MODAL DETALLE (SLIDE-OVER) ================= */}
+      {/* ================= MODAL SLIDE-OVER (DETALLE) ================= */}
       {isDetailOpen && selectedEvent && (
           <div className="fixed inset-0 z-50 flex justify-end">
-              <div 
-                className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm transition-opacity animate-in fade-in" 
-                onClick={() => setIsDetailOpen(false)}
-              ></div>
+              <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-in fade-in" onClick={() => setIsDetailOpen(false)}></div>
 
-              <div className="relative w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col border-l border-slate-100">
-                  {/* Header con color dinámico */}
-                  <div className={`p-6 border-b border-slate-100 flex justify-between items-start shrink-0 ${EVENT_STYLES[selectedEvent.extendedProps.type].bg}`}>
-                      <div>
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wide mb-3 bg-white/80 backdrop-blur-sm border ${EVENT_STYLES[selectedEvent.extendedProps.type].border.replace('border-', 'text-')} shadow-sm`}>
-                              {React.createElement(EVENT_STYLES[selectedEvent.extendedProps.type].icon, { size: 12 })}
-                              {selectedEvent.extendedProps.type}
-                          </span>
-                          <h2 className="text-xl font-black text-slate-900 leading-tight">
-                              {selectedEvent.extendedProps.patientName}
-                          </h2>
-                          <div className="flex items-center gap-2 mt-1 text-slate-600 text-xs font-bold">
-                              <MapPin size={12}/> {selectedEvent.extendedProps.eps || 'Particular'}
-                          </div>
+              <div className="relative w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-500 flex flex-col border-l border-emerald-100">
+                  <div className={`p-8 border-b border-slate-100 shrink-0 ${EVENT_STYLES[selectedEvent.extendedProps.type].bg}`}>
+                      <div className="flex justify-between items-start mb-6">
+                        <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-white border ${EVENT_STYLES[selectedEvent.extendedProps.type].border.replace('border-', 'text-')} shadow-sm`}>
+                            {React.createElement(EVENT_STYLES[selectedEvent.extendedProps.type].icon, { size: 14 })}
+                            {selectedEvent.extendedProps.type}
+                        </span>
+                        <button onClick={() => setIsDetailOpen(false)} className="p-2 bg-white/80 hover:bg-white rounded-full transition-all text-slate-400 hover:text-rose-500 shadow-sm"><X size={20}/></button>
                       </div>
-                      <button onClick={() => setIsDetailOpen(false)} className="p-2 bg-white/50 hover:bg-white rounded-full transition-all text-slate-500 hover:text-rose-500 shadow-sm">
-                          <X size={20}/>
-                      </button>
+                      <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+                          {selectedEvent.extendedProps.patientName}
+                      </h2>
+                      <div className="flex items-center gap-2 mt-2 text-emerald-700 text-xs font-black uppercase">
+                          <MapPin size={12}/> {selectedEvent.extendedProps.eps || 'PARTICULAR'}
+                      </div>
                   </div>
 
-                  {/* Body */}
-                  <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-white">
-                      
-                      {/* Estado y Fecha */}
+                  <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
                       <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50">
-                              <span className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Fecha & Hora</span>
-                              <div className="flex items-center gap-2 font-bold text-slate-700 text-sm">
-                                  <Clock size={16} className="text-blue-500"/>
-                                  {new Date(selectedEvent.start).toLocaleString()}
+                          <div className="p-5 rounded-[2rem] border border-slate-100 bg-slate-50 shadow-inner">
+                              <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Agenda</span>
+                              <div className="flex items-center gap-2 font-black text-slate-700 text-xs uppercase">
+                                  <Clock size={16} className="text-emerald-500"/>
+                                  {new Date(selectedEvent.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                               </div>
                           </div>
-                          <div className={`p-4 rounded-2xl border ${STATUS_STYLES[selectedEvent.extendedProps.status].bg.replace('bg-', 'border-').replace('100', '200')} ${STATUS_STYLES[selectedEvent.extendedProps.status].bg}`}>
-                              <span className="block text-[10px] font-bold opacity-60 uppercase mb-1">Estado Actual</span>
-                              <div className={`flex items-center gap-2 font-bold text-sm ${STATUS_STYLES[selectedEvent.extendedProps.status].color}`}>
+                          <div className={`p-5 rounded-[2rem] border ${STATUS_STYLES[selectedEvent.extendedProps.status].bg.replace('100', '200')} ${STATUS_STYLES[selectedEvent.extendedProps.status].bg} shadow-inner`}>
+                              <span className="block text-[9px] font-black opacity-60 uppercase tracking-widest mb-2">Estado</span>
+                              <div className={`flex items-center gap-2 font-black text-xs uppercase ${STATUS_STYLES[selectedEvent.extendedProps.status].color}`}>
                                   {React.createElement(STATUS_STYLES[selectedEvent.extendedProps.status].icon, { size: 16 })}
                                   {STATUS_STYLES[selectedEvent.extendedProps.status].label}
                               </div>
                           </div>
                       </div>
 
-                      {/* Detalles del Procedimiento */}
-                      <div>
-                          <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Detalle del Procedimiento</label>
-                          <div className="p-5 rounded-2xl border border-slate-100 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-                              <p className="font-bold text-slate-800 text-sm leading-relaxed">
+                      <div className="space-y-4">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Datos del Procedimiento</label>
+                          <div className="p-6 rounded-[2.5rem] border border-emerald-100 bg-emerald-50/20 shadow-sm relative overflow-hidden">
+                              <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-500"><Activity size={64}/></div>
+                              <p className="font-black text-emerald-900 text-base leading-tight uppercase relative z-10">
                                   {selectedEvent.extendedProps.serviceName}
                               </p>
                               {selectedEvent.extendedProps.cups && (
-                                  <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-[10px] font-mono font-bold text-slate-500 border border-slate-200">
-                                      <FileText size={12}/> CUPS: {selectedEvent.extendedProps.cups}
+                                  <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 bg-white border border-emerald-200 rounded-lg text-[10px] font-mono font-black text-emerald-600">
+                                      CUPS: {selectedEvent.extendedProps.cups}
                                   </div>
                               )}
                           </div>
                       </div>
 
-                      {/* Contacto */}
-                      {(selectedEvent.extendedProps.phone || selectedEvent.extendedProps.email) && (
-                          <div>
-                              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Contacto Paciente</label>
-                              <div className="space-y-3">
-                                  {selectedEvent.extendedProps.phone && (
-                                      <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer border border-transparent hover:border-slate-100 group">
-                                          <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm group-hover:scale-110 transition-transform"><Phone size={18}/></div>
-                                          <div>
-                                              <span className="block text-xs text-slate-400 font-medium">Teléfono Móvil</span>
-                                              <span className="block text-sm font-bold text-slate-700">{selectedEvent.extendedProps.phone}</span>
-                                          </div>
+                      <div className="space-y-4">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Contacto de Paciente</label>
+                          <div className="grid grid-cols-1 gap-2">
+                              {selectedEvent.extendedProps.phone && (
+                                  <a href={`tel:${selectedEvent.extendedProps.phone}`} className="flex items-center gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:border-emerald-300 transition-all group">
+                                      <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-emerald-600 shadow-sm group-hover:bg-emerald-500 group-hover:text-white transition-all"><Phone size={18}/></div>
+                                      <div>
+                                          <span className="block text-[9px] text-slate-400 font-black uppercase tracking-widest">Móvil</span>
+                                          <span className="block text-sm font-black text-slate-800">{selectedEvent.extendedProps.phone}</span>
                                       </div>
-                                  )}
-                                  {selectedEvent.extendedProps.email && (
-                                      <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer border border-transparent hover:border-slate-100 group">
-                                          <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-transform"><Mail size={18}/></div>
-                                          <div>
-                                              <span className="block text-xs text-slate-400 font-medium">Correo Electrónico</span>
-                                              <span className="block text-sm font-bold text-slate-700 truncate max-w-[200px]">{selectedEvent.extendedProps.email}</span>
-                                          </div>
+                                  </a>
+                              )}
+                              {selectedEvent.extendedProps.email && (
+                                  <a href={`mailto:${selectedEvent.extendedProps.email}`} className="flex items-center gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:border-blue-300 transition-all group">
+                                      <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-blue-600 shadow-sm group-hover:bg-blue-500 group-hover:text-white transition-all"><Mail size={18}/></div>
+                                      <div className="min-w-0 flex-1">
+                                          <span className="block text-[9px] text-slate-400 font-black uppercase tracking-widest">Email</span>
+                                          <span className="block text-sm font-black text-slate-800 truncate">{selectedEvent.extendedProps.email}</span>
                                       </div>
-                                  )}
-                              </div>
+                                  </a>
+                              )}
                           </div>
-                      )}
-
-                      {/* Notas */}
-                      {selectedEvent.extendedProps.description && (
-                          <div>
-                              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Observaciones</label>
-                              <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-100 text-slate-600 text-sm italic relative">
-                                  <span className="absolute top-3 left-3 text-amber-200 text-5xl font-serif leading-none">“</span>
-                                  <p className="relative z-10 pl-4 pt-2">{selectedEvent.extendedProps.description}</p>
-                              </div>
-                          </div>
-                      )}
+                      </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="p-6 border-t border-slate-100 bg-slate-50/80 shrink-0">
+                  <div className="p-8 border-t border-slate-100 bg-slate-50/50 shrink-0">
                       <button 
-                          onClick={() => router.push(`/navegacion/admin/pacientes/perfil?id=${selectedEvent.extendedProps.patientId}`)}
-                          className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-xl shadow-slate-900/10 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-95"
+                          onClick={() => router.push(`/navegacion/atencion/casos/${selectedEvent.extendedProps.patientId}`)}
+                          className="w-full py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl shadow-slate-900/20 hover:bg-emerald-600 transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
                       >
-                          <span>Gestionar Paciente</span>
+                          <span>Ir al Expediente Clínico</span>
                           <ChevronRight size={18}/>
                       </button>
                   </div>
@@ -483,51 +429,28 @@ export default function AgendaPage() {
           </div>
       )}
 
-      {/* ESTILOS GLOBALES FULLCALENDAR */}
+      {/* ESTILOS GLOBALES - REFINAMIENTO ESMERALDA */}
       <style jsx global>{`
-        .fc { height: 100%; width: 100%; font-family: inherit; }
+        .fc { height: 100%; width: 100%; font-family: inherit; border: none !important; }
+        .fc-header-toolbar { margin-bottom: 2rem !important; padding: 1rem 1rem 0 1rem; }
+        .fc-toolbar-title { font-size: 1.5rem !important; font-weight: 900 !important; color: #064e3b; text-transform: capitalize; letter-spacing: -0.05em; }
+        .fc-button { border-radius: 1rem !important; font-weight: 800 !important; text-transform: uppercase !important; padding: 0.6rem 1.2rem !important; font-size: 0.7rem !important; border: 1px solid #f1f5f9 !important; background: white !important; color: #64748b !important; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); letter-spacing: 0.05em; }
+        .fc-button:hover { background: #f8fafc !important; color: #064e3b !important; transform: translateY(-2px); shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .fc-button-active { background: #064e3b !important; border-color: #064e3b !important; color: white !important; shadow: 0 10px 20px -5px rgba(6, 78, 59, 0.4) !important; }
+        .fc-col-header-cell { padding: 16px 0 !important; background: transparent !important; border: 0 !important; }
+        .fc-col-header-cell-cushion { font-size: 0.7rem; font-weight: 900; text-transform: uppercase; color: #94a3b8; text-decoration: none !important; letter-spacing: 0.15em; }
+        .fc-daygrid-day { border: 1px solid #f8fafc !important; transition: all 0.2s ease; }
+        .fc-daygrid-day:hover { background-color: #f1f5f9/30 !important; z-index: 1; }
+        .fc-day-today { background-color: #f0fdf4 !important; }
+        .fc-day-today .fc-daygrid-day-number { background-color: #10b981; color: white; border-radius: 12px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; shadow: 0 4px 10px rgba(16, 185, 129, 0.3); }
+        .fc-daygrid-day-number { font-size: 0.8rem; font-weight: 800; color: #64748b; padding: 12px !important; text-decoration: none !important; }
+        .fc-event { border: none !important; background: transparent !important; margin: 2px 4px !important; }
+        .fc-list-event:hover td { background-color: #f0fdf4 !important; cursor: pointer; }
+        .fc-list-day-cushion { background-color: #f8fafc !important; font-weight: 900 !important; font-size: 0.7rem !important; text-transform: uppercase !important; color: #64748b !important; letter-spacing: 0.1em; }
         
-        /* Toolbar */
-        .fc-header-toolbar { margin-bottom: 1.5rem !important; padding: 0.5rem; }
-        .fc-toolbar-title { font-size: 1.25rem !important; font-weight: 900 !important; color: #0f172a; text-transform: capitalize; letter-spacing: -0.025em; }
-        
-        /* Botones del Toolbar */
-        .fc-button { border-radius: 0.75rem !important; font-weight: 700 !important; text-transform: capitalize !important; padding: 0.5rem 1rem !important; font-size: 0.8rem !important; border: 1px solid #e2e8f0 !important; background-color: white !important; color: #475569 !important; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); transition: all 0.2s; }
-        .fc-button:hover { background-color: #f8fafc !important; color: #1e293b !important; transform: translateY(-1px); }
-        .fc-button-active { background-color: #0f172a !important; border-color: #0f172a !important; color: white !important; }
-        
-        /* Cabecera de días */
-        .fc-col-header-cell { padding: 12px 0 !important; background-color: white !important; border: 0 !important; border-bottom: 1px solid #f1f5f9 !important; }
-        .fc-col-header-cell-cushion { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #94a3b8; text-decoration: none !important; letter-spacing: 0.05em; }
-        
-        /* Celdas del Mes */
-        .fc-scrollgrid { border: none !important; }
-        .fc-daygrid-day { border: 1px solid #f8fafc !important; transition: background-color 0.2s; }
-        .fc-daygrid-day:hover { background-color: #fcfcfc; }
-        
-        /* Scroll y Altura */
-        .fc-daygrid-day-frame { min-height: 100% !important; overflow: hidden; }
-        .fc-daygrid-day-events { min-height: 2em !important; margin-top: 2px; }
-        
-        /* Números de día */
-        .fc-daygrid-day-top { flex-direction: row; padding: 8px; }
-        .fc-daygrid-day-number { font-size: 0.75rem; font-weight: 700; color: #64748b; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 99px; transition: all 0.2s; text-decoration: none !important; }
-        .fc-day-today { background-color: #f8fafc !important; }
-        .fc-day-today .fc-daygrid-day-number { background-color: #2563eb; color: white; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3); }
-        
-        /* Eventos */
-        .fc-event { border: none !important; background: transparent !important; margin-bottom: 4px !important; box-shadow: none !important; }
-        
-        /* Scrollbars personalizados */
-        .fc-scroller::-webkit-scrollbar { width: 6px; height: 6px; }
-        .fc-scroller::-webkit-scrollbar-track { background: transparent; }
-        .fc-scroller::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        .fc-scroller::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #10b981/20; border-radius: 99px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #10b981/40; }
       `}</style>
 
     </div>

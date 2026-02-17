@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { User } from '../models/User';
 
-// --- EXTENSIÓN DE TIPOS ---
+// EXTENSIÓN DE TIPOS
 declare global {
     namespace Express {
         interface Request {
@@ -11,7 +11,7 @@ declare global {
     }
 }
 
-// 1. MIDDLEWARE DE AUTENTICACIÓN (Blindado)
+// 1. MIDDLEWARE DE AUTENTICACIÓN
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const authHeader = req.headers.authorization;
@@ -31,8 +31,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         const decoded = jwt.verify(token, secret) as { id: number };
 
         // 3. Verificación contra Base de Datos (Seguridad en tiempo real)
-        // Buscamos al usuario para asegurar que no ha sido eliminado o baneado
-        // mientras su token seguía "vivo".
+        // Buscamos al usuario para asegurar que no ha sido eliminado o baneado mientras su token seguía "vivo".
         const user = await User.findByPk(decoded.id, {
             attributes: { exclude: ['password', 'resetPasswordToken'] }
         });
@@ -44,8 +43,6 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             });
         }
 
-        // (OPCIONAL) Si tuvieras un campo isActive o isBanned:
-        // if (!user.isActive) { return res.status(403).json({ error: 'Cuenta inhabilitada' }); }
 
         // 4. Inyectar usuario en la request y continuar
         req.user = user;
@@ -53,7 +50,6 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     } catch (error) {
         // 5. Manejo de Errores Profesional
-        // Diferenciamos por qué falló para ayudar al Frontend
         if (error instanceof TokenExpiredError) {
             return res.status(401).json({ 
                 code: 'TOKEN_EXPIRED',
@@ -74,10 +70,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-// 2. MIDDLEWARE DE AUTORIZACIÓN (RBAC - Role Based Access Control)
+// 2. MIDDLEWARE DE AUTORIZACIÓN
 export const authorize = (allowedRoles: string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
-        // Fail-safe: Si por alguna razón authenticate falló pero pasó
         if (!req.user) {
             return res.status(401).json({ 
                 code: 'Unauthenticated',

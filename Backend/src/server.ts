@@ -15,11 +15,11 @@ import backupRoutes from './routes/backupRoutes';
 
 const app = express();
 
-// --- 1. CONFIGURACIÓN DE SEGURIDAD Y CARGA ---
+// 1. CONFIGURACIÓN DE SEGURIDAD Y CARGA
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// --- 2. CORS MEJORADO ---
+// 2. CORS MEJORADO
 // Agregamos explícitamente localhost con IP y nombre para evitar fallos de resolución
 const allowedOrigins = [
     'http://localhost:3000',
@@ -38,7 +38,7 @@ app.use(cors({
 
 app.use(morgan('dev'));
 
-// --- 3. DEFINICIÓN DE RUTAS ---
+// 3. DEFINICIÓN DE RUTAS
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/patients', patientRoutes);
@@ -53,12 +53,12 @@ app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
         server: 'Vidanova Backend', 
-        database: 'Connected', // Esto asume que el servidor solo sube si la DB está ok
+        database: 'Connected', 
         timestamp: new Date().toISOString() 
     });
 });
 
-// --- 4. MANEJO DE RUTAS NO ENCONTRADAS (404) ---
+// 4. MANEJO DE RUTAS NO ENCONTRADAS
 // Crucial para que el frontend no reciba un HTML de error sino un JSON claro
 app.use((req: Request, res: Response) => {
     res.status(404).json({
@@ -67,7 +67,7 @@ app.use((req: Request, res: Response) => {
     });
 });
 
-// --- 5. MANEJO DE ERRORES GLOBAL ---
+// 5. MANEJO DE ERRORES GLOBAL
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     console.error('🔥 ERROR SISTEMA:', err.message);
     

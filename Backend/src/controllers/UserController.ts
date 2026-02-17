@@ -4,9 +4,9 @@ import bcrypt from 'bcryptjs';
 
 export class UserController {
 
-    // ---------------------------------------------------------
-    // ZONA ADMIN (Gestión de equipos)
-    // ---------------------------------------------------------
+    
+    // ZONA ADMIN 
+    
 
     // ADMIN: Obtener todo el equipo
     static getTeam = async (req: Request, res: Response) => {
@@ -32,10 +32,9 @@ export class UserController {
         }
     }
 
-    // ADMIN: Crear usuario (Invitar con Cédula)
+    // Admin: Crear usuario invitar con Cédula
     static createUser = async (req: Request, res: Response) => {
         try {
-            // ✅ Ahora extraemos documentNumber y el email es opcional
             const { documentNumber, password, name, role, email, phone } = req.body;
             
             // Validación de datos críticos
@@ -94,7 +93,7 @@ export class UserController {
         }
     }
 
-    // ADMIN: Actualizar usuario (Incluyendo Cédula si es necesario)
+    // ADMIN: Actualizar usuario
     static updateUser = async (req: Request, res: Response) => {
         try {
             const { id } = req.params;
@@ -126,9 +125,9 @@ export class UserController {
         }
     }
 
-    // ---------------------------------------------------------
+    
     // ZONA PERSONAL (Mi Perfil)
-    // ---------------------------------------------------------
+    
 
     static getProfile = async (req: Request, res: Response) => {
         if (!req.user) return res.status(401).json({ error: 'No autenticado' });

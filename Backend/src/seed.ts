@@ -10,8 +10,8 @@ const seedAdmin = async () => {
         // Creamos el Super Admin
         await User.create({
             name: 'Admin Vidanova',
-            documentNumber: '1061000000', // <--- TU LOGIN
-            password: 'adminnavegacion',    // <--- TU CLAVE
+            documentNumber: '1061000000',
+            password: 'adminnavegacion',
             role: 'SUPER_ADMIN',
             email: 'admin@vidanova.com',
             status: 'online'

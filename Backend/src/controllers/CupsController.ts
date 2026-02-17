@@ -12,9 +12,9 @@ export class CupsController {
             .replace(/[\u0300-\u036f]/g, "");
     }
 
-    // =================================================================
-    // MOTOR DE INTELIGENCIA DE NEGOCIO (V15 - CON CATEGORÍA 'OTROS')
-    // =================================================================
+    
+    // MOTOR DE INTELIGENCIA DE NEGOCIO PARA CATEGORIZAR CUPS
+    
     public static async runAutoCategorization() {
         console.log("🌱 EJECUTANDO CLASIFICACIÓN V15 (CON 'OTROS')...");
         
@@ -107,20 +107,21 @@ export class CupsController {
                 'RETIRO', 'CATETER', 'BIOPSIA', 'SUTURA', 'PUNCION', 'PARACENTESIS', 
                 'TORACOCENTESIS', 'LAVADO', 'CURACION', 'DESBRIDAMIENTO'
             ],
-            // 🔥 NUEVA CATEGORÍA PARA COSAS QUE NO TIENEN NADA QUE VER
+            'Oncología': [ 
+                'ONCOLOGIA', 'CANCER', 'TUMOR', 'NEOPLASIA', 'CARCINOMA',
+                'SARCOMA', 'LINFOMA', 'LEUCEMIA', 'MELANOMA', 'BLASTOMA'
+            ],
+
+            // ESTA CATEGORIA ES PARA LOS CUPS QUE NO ENCAJAN EN NINGUNA DE LAS ANTERIORES  
             'Otros': [
                 'TRANSPORTE', 'TRASLADO', 'AMBULANCIA', 'MOVILIZACION', 
                 'COPIA', 'FOTOCOPIA', 'CERTIFICADO', 'HISTORIA CLINICA',
                 'DOCUMENTO', 'ADMINISTRATIVO', 'NO POS', 'CUOTA MODERADORA',
                 'COPAGO', 'PARTICULAR'
-            ],
-            'Oncología': [ 
-                'ONCOLOGIA', 'CANCER', 'TUMOR', 'NEOPLASIA', 'CARCINOMA',
-                'SARCOMA', 'LINFOMA', 'LEUCEMIA', 'MELANOMA', 'BLASTOMA'
             ]
         };
 
-               // 2. DICCIONARIO DE CAC (PARA PRESERVACIÓN EN OBSERVACIÓN)
+               // 2. DICCIONARIO DE CAC 
         const DIAGNOSTICOS: Record<string, string[]> = {
             '1= CAC Mama': ['C50', 'C500', 'C501', 'C502', 'C503', 'C504', 'C505', 'C506', 'C508', 'C509', 'D05', 'D050', 'D051', 'D057', 'D059', 'MAMA', 'MASTOLOGIA', 'HER-2', 'BRCA', 'CUADRANTE', 'MASTECTOMIA', 'PEZON', 'AREOLA', 'AXILAR', 'CARCINOMA IN SITU DE LA MAMA', 'INTRACANALICULAR', 'LOBULAR'],
             '2= CAC Próstata': ['C61', 'C61X', 'D075', 'PROSTATA', 'PSA', 'ANTIGENO ESPECIFICO DE PROSTATA', 'PROSTATECTOMIA', 'TUMOR MALIGNO DE LA PROSTATA', 'CARCINOMA IN SITU DE LA PROSTATA'],
@@ -163,7 +164,7 @@ export class CupsController {
         try {
             for (const record of allRecords) {
                 const texto = CupsController.normalizeText(record.serviceName || '');
-                let newCategory = 'Oncología'; // Default final
+                let newCategory = 'Oncología';
                 let foundModality = false;
 
                 // 1. Detectar Modalidad
@@ -232,9 +233,8 @@ export class CupsController {
         return updatedCount;
     }
 
-    // =================================================================
-    // API ENDPOINTS
-    // =================================================================
+    
+    
 
     static fixLegacyCategories = async (req: Request, res: Response) => {
         try {

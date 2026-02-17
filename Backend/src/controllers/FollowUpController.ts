@@ -9,15 +9,13 @@ export class FollowUpController {
         try {
             const { id } = req.params;
 
-            // 🔥 CORRECCIÓN: Convertir explícitamente a string para calmar a TypeScript
-            // Esto asegura que nunca sea tratado como un array (string[])
+            // Esto asegura que nunca sea tratado como un array 
             const followUpId = String(id);
 
             const followUp = await FollowUp.findByPk(followUpId, {
                 include: [
                     { 
                         model: Patient,
-                        // Traemos los datos del paciente para llenar la columna izquierda del detalle
                     }
                 ]
             });
@@ -33,7 +31,7 @@ export class FollowUpController {
         }
     }
 
-    // 2. CREAR NUEVO SEGUIMIENTO (Faltaba este)
+    // 2. CREAR NUEVO SEGUIMIENTO 
     static createFollowUp = async (req: Request, res: Response) => {
         try {
             const { patientId, ...data } = req.body;
@@ -55,7 +53,7 @@ export class FollowUpController {
         }
     }
 
-    // 3. EDITAR SEGUIMIENTO (Faltaba este)
+    // 3. EDITAR SEGUIMIENTO 
     static updateFollowUp = async (req: Request, res: Response) => {
         try {
             const { id } = req.params;

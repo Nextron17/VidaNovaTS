@@ -7,16 +7,16 @@ import { Patient } from './Patient';
 })
 export class FollowUp extends Model {
     
-    // --- CLAVE FORÁNEA (El "Pegante") ---
+    // CLAVE FORÁNEA
     @ForeignKey(() => Patient)
     @Column({ type: DataType.INTEGER, allowNull: false })
     patientId!: number;
 
-    // --- RELACIÓN INVERSA ---
+    // RELACIÓN INVERSA
     @BelongsTo(() => Patient)
     patient!: Patient;
 
-    // --- DATOS ---
+    // DATOS 
     @Column({ type: DataType.DATEONLY, allowNull: true })
     dateRequest!: Date | null;
 

@@ -14,20 +14,16 @@ export class AnalyticsController {
 
             console.log(`📊 [ANALYTICS] Generando reporte para el año: ${selectedYear}`);
 
-            // 2. Definir rango de fechas (Enero 1 - Diciembre 31 del año seleccionado)
+            // 2. Definir rango de fechas desde el 1 Ene hasta el 31 de Dic
             const startDate = new Date(selectedYear, 0, 1); // 1 Ene 00:00
             const endDate = new Date(selectedYear, 11, 31, 23, 59, 59); // 31 Dic 23:59
 
-            // 3. CONSULTAS A LA BD
-            
-            // A. Pacientes (Snapshot actual, no suele filtrarse por año histórico a menos que sea fecha registro)
-            // Nota: Aquí mantenemos el total histórico para "Población", 
-            // pero podrías filtrar por createdAt si quisieras ver "Nuevos Pacientes del Año".
+            // 3. CONSULTAS A LA BD 
             const patients = await Patient.findAll({
                 attributes: ['gender', 'birthDate']
             });
 
-            // B. Solicitudes/Seguimientos (Filtrados estrictamente por el AÑO SELECCIONADO)
+            // B. Solicitudes/Seguimientos
             const followUps = await FollowUp.findAll({
                 attributes: ['dateRequest'],
                 where: {
@@ -37,9 +33,7 @@ export class AnalyticsController {
                 }
             });
 
-            // --- PROCESAMIENTO DE DATOS ---
-
-            // 1. GÉNERO (Misma lógica blindada)
+            // 1. GÉNERO
             let genderMap: any = { 'M': 0, 'F': 0, 'O': 0 };
             patients.forEach(p => {
                 const g = (p.gender || '').toUpperCase().trim();
@@ -53,7 +47,7 @@ export class AnalyticsController {
                 { name: 'Otros', value: genderMap['O'] },
             ].filter(i => i.value > 0);
 
-            // 2. EDAD (Misma lógica)
+            // 2. EDAD
             const ageRanges = { '0-18': 0, '19-30': 0, '31-50': 0, '51-70': 0, '70+': 0 };
             const today = new Date(); // Calculamos edad al día de hoy
             patients.forEach(p => {
@@ -75,7 +69,7 @@ export class AnalyticsController {
             });
             const ageData = Object.keys(ageRanges).map(key => ({ range: key, count: (ageRanges as any)[key] }));
 
-            // 3. TENDENCIA MENSUAL (12 Meses del Año Seleccionado)
+            // 3. Meses
             const monthsBase = [
                 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
                 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'

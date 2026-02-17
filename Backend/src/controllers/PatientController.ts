@@ -45,7 +45,7 @@ export class PatientController {
 
             const offset = (Number(page) - 1) * Number(limit);
             
-            // --- A. Filtros del PACIENTE ---
+            // A. Filtros del PACIENTE
             const patientWhere: any = {};
 
             if (eps && eps !== 'TODAS') {
@@ -60,9 +60,9 @@ export class PatientController {
                 ];
             }
 
-            // --- B. Filtros del SEGUIMIENTO (FollowUp) ---
+            // B. Filtros del SEGUIMIENTO 
             const followUpWhere: any = {};
-            let hasFollowUpFilters = false; // Bandera manual para evitar el error de Object.keys
+            let hasFollowUpFilters = false; 
 
             // 1. Estado
             if (status && status !== 'TODOS') {
@@ -78,16 +78,16 @@ export class PatientController {
                 hasFollowUpFilters = true;
             }
 
-            // 3. Modalidad / Cohorte (El filtro problemático)
+            // 3. Modalidad / Cohorte 
             if (cohorte) {
                 const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
                 
                 if (filtrosList.length > 0) {
                     followUpWhere[Op.or] = filtrosList.map(filtro => ({
                         [Op.or]: [
-                            // Busca en Categoría (ej: "Imagenología")
+                            // Busca en Categoría ("Imagenología")
                             { category: { [Op.like]: `%${filtro}%` } },
-                            // Busca en Observación (ej: "1= CAC Mama")
+                            // Busca en Observación ("1= CAC Mama")
                             { observation: { [Op.like]: `%${filtro}%` } }
                         ]
                     }));
@@ -99,13 +99,12 @@ export class PatientController {
             const includeOptions: any[] = [{
                 model: FollowUp,
                 as: 'followups',
-                required: hasFollowUpFilters, // Si hay filtros, es INNER JOIN (estricto)
-                // Si hay filtros, asignamos el WHERE. Si no, lo dejamos undefined.
+                required: hasFollowUpFilters,
                 where: hasFollowUpFilters ? followUpWhere : undefined,
                 order: [['dateRequest', 'DESC']]
             }];
 
-            // --- C. Ejecutar Consulta ---
+            // C. Ejecutar Consulta
             const { count, rows } = await Patient.findAndCountAll({
                 where: patientWhere,
                 include: includeOptions,
@@ -115,14 +114,14 @@ export class PatientController {
                 order: [['updatedAt', 'DESC']]
             });
 
-            // Reordenar followups en memoria para que el [0] sea siempre el más reciente
+            // Reordenar followups en memoria para que el 0 sea siempre el más reciente
             rows.forEach((p: any) => {
                 if (p.followups && p.followups.length > 0) {
                     p.followups.sort((a: any, b: any) => new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime());
                 }
             });
 
-            // --- D. Estadísticas ---
+            // D. Estadístics
             const stats = {
                 total: await Patient.count(),
                 pendientes: await FollowUp.count({ where: { status: 'PENDIENTE' } }),
@@ -157,7 +156,7 @@ export class PatientController {
         }
     }
 
-    // 3. GESTIÓN MASIVA (BULK UPDATE)
+    // 3. GESTIÓN MASIVA 
     static bulkUpdate = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
@@ -258,7 +257,6 @@ export class PatientController {
     // 5. DETALLES Y CRUD
     static getPatientById = async (req: Request, res: Response) => {
         try {
-            // 🔥 CORRECCIÓN: String()
             const id = String(req.params.id);
             const patient = await Patient.findByPk(id, {
                 include: [{ model: FollowUp, as: 'followups' }],
@@ -282,11 +280,10 @@ export class PatientController {
         }
     }
 
-    // 6. ACTUALIZAR PACIENTE (CORREGIDO Y BLINDADO)
+    // 6. ACTUALIZAR PACIENTE
     static updatePatient = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
-            // 🔥 CORRECCIÓN: Forzamos String() para evitar error 'string | string[]'
             const id = String(req.params.id); 
             const data = req.body;
 
@@ -318,10 +315,9 @@ export class PatientController {
         }
     }
 
-    // 7. ELIMINAR PACIENTE (CORREGIDO)
+    // 7. ELIMINAR PACIENTE
     static deletePatient = async (req: Request, res: Response) => {
         try {
-            // 🔥 CORRECCIÓN: String()
             const id = String(req.params.id);
             await Patient.destroy({ where: { id: id } }); 
             res.json({ success: true, message: 'Eliminado' });

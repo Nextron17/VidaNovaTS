@@ -6,9 +6,9 @@ import { CupsController } from '../controllers/CupsController';
 
 export class ImportService {
 
-    // =================================================================
-    // 1. HELPERS DE LIMPIEZA Y NORMALIZACIÓN (NIVEL EXPERTO)
-    // =================================================================
+    
+    // 1. HELPERS DE LIMPIEZA Y NORMALIZACIÓN 
+    
 
     private static parseDocType(raw: any): string {
         const t = String(raw || '').toUpperCase().trim();
@@ -40,7 +40,7 @@ export class ImportService {
         const numberCount = text.replace(/[^0-9]/g, '').length;
         
         if (numberCount === 0) return true; 
-        if (letterCount > 3 && letterCount > numberCount) return true; // Más letras que números = Basura
+        if (letterCount > 3 && letterCount > numberCount) return true;
         return false;
     }
 
@@ -48,8 +48,8 @@ export class ImportService {
         if (!val) return '';
         let str = String(val).trim();
         if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
-        str = str.replace(/(\r\n|\n|\r)/gm, " "); // Quitar saltos de línea
-        str = str.replace(/\s\s+/g, ' '); // Quitar dobles espacios
+        str = str.replace(/(\r\n|\n|\r)/gm, " "); 
+        str = str.replace(/\s\s+/g, ' '); 
         return str.toUpperCase();
     }
 
@@ -106,7 +106,7 @@ export class ImportService {
                     else if (parts[2].length === 4) date = new Date(p2, p1 - 1, p0);
                 }
             }
-            // Validar fechas futuras irreales (ej: año 2900) o muy pasadas (año 1900 para una cita)
+            // Validar fechas futuras irreales 
             if (date && !isNaN(date.getTime())) {
                 if (date.getFullYear() < 1900 || date.getFullYear() > 2100) return null;
                 return date;
@@ -115,9 +115,9 @@ export class ImportService {
         return null;
     }
 
-    // =================================================================
-    // 2. MOTOR DE DIAGNÓSTICOS HÍBRIDO (CIE-10 + TEXTO)
-    // =================================================================
+    
+    // 2. MOTOR DE DIAGNÓSTICOS HÍBRIDO
+    
     
     // Método principal: Busca por código CIE-10
     private static getCohortFromCie10(code: any): string | null {
@@ -153,7 +153,7 @@ export class ImportService {
         return null;
     }
 
-    // Método de Respaldo: Busca por descripción de texto (Futuro-Proof)
+    // Método de Respaldo: Busca por descripción de texto
     private static getCohortFromText(text: string): string | null {
         if (!text) return null;
         const t = text.toUpperCase();
@@ -166,16 +166,15 @@ export class ImportService {
         if (t.includes('PIEL') || t.includes('MELANOMA')) return '6= CAC Melanoma';
         if (t.includes('PULMON') || t.includes('BRONQUI')) return '7= CAC Pulmón';
         if (t.includes('TIROIDES')) return '22= Glándulas tiroides y endocrinas';
-        if (t.includes('LEUCEMIA')) return '10= CAC Leucemia Linfocítica Aguda'; // Default aproximado
-        if (t.includes('LINFOMA')) return '8= CAC Linfoma Hodgkin'; // Default aproximado
+        if (t.includes('LEUCEMIA')) return '10= CAC Leucemia Linfocítica Aguda';
+        if (t.includes('LINFOMA')) return '8= CAC Linfoma Hodgkin';
         
         return null;
     }
 
-    // =================================================================
+    
     // 3. LECTOR CSV MANUAL (FALLBACK)
-    // =================================================================
-    // ... (Se mantiene el lector manual por si acaso falla la librería XLSX)
+    
     private static splitCSVRow(row: string, delimiter: string = ';'): string[] {
         const matches = [];
         let current = '';
@@ -227,9 +226,9 @@ export class ImportService {
         return data;
     }
 
-    // =================================================================
+    
     // 4. PROCESO PRINCIPAL: CARGA MASIVA MULTI-HOJA
-    // =================================================================
+    
 
     static async processPatientExcel(buffer: Buffer) {
         try {
@@ -262,7 +261,7 @@ export class ImportService {
 
                 totalSheetsProcessed++;
 
-                // MAPEO EXTENDIDO (Future-Proof: Cubre cualquier nombre de columna posible)
+                // MAPEO EXTENDIDO
                 const mapKeys: Record<string, string[]> = {
                     'tipo_doc': ['tipo_de_identificacion', 'tipo_identificacion', 'tipo_documento', 'tipo_id', 'td'],
                     'doc': ['numero_de_identificacion', 'num_identificacion', 'numero_identificacion', 'cedula', 'documento', 'identificacion', 'numero_documento', 'id_paciente'],
@@ -286,7 +285,6 @@ export class ImportService {
                     'cie10': ['codigo_diagnostico', 'cie10', 'dx', 'diagnostico_principal', 'codigo_dx'], 
                     'desc_dx': ['diagnostico', 'descripcion_diagnostico', 'nombre_dx'], // Nuevo para respaldo por texto
                     
-                    // 🔥 SÚPER ESTADOS
                     'estado_general': [
                         'estado_de_la_solicitud', 'estado_solicitud', 'estado_cita', 'estado_de_la_cita', 
                         'estado', 'situacion', 'solicitud', 'estado_asistencial', 'estado_administrativo', 'estado_autorizacion'
@@ -338,13 +336,12 @@ export class ImportService {
                         if (!dRequest) dRequest = new Date(); 
                         let dAppoint = ImportService.parseDate(getVal('fecha_cita'));
 
-                        // 3. Lógica de Estados Definitiva (Incluye Comodines)
+                        // 3. Lógica de Estados Definitiva
                         const rawStatus = ImportService.cleanText(getVal('estado_general')); 
                         const notaRealizada = ImportService.cleanText(getVal('nota_realizada')); 
                         
-                        let status = 'PENDIENTE'; // Default (Naranja)
+                        let status = 'PENDIENTE'; 
 
-                        // >>> ESTADO: CANCELADO (Rojo)
                         if (
                             rawStatus.includes('CANCEL') || 
                             rawStatus.includes('NO ASISTE') || 
@@ -358,7 +355,6 @@ export class ImportService {
                         ) {
                             status = 'CANCELADO';
                         } 
-                        // >>> ESTADO: REALIZADO (Verde)
                         else if (
                             (notaRealizada.length > 2 && !notaRealizada.includes('NO')) || 
                             rawStatus.includes('REALIZAD') || 
@@ -376,7 +372,6 @@ export class ImportService {
                         ) {
                             status = 'REALIZADO';
                         } 
-                        // >>> ESTADO: AGENDADO (Azul)
                         else if (
                             rawStatus.includes('ASIGNA') || 
                             rawStatus.includes('PROGRAMA') || 
@@ -386,7 +381,6 @@ export class ImportService {
                         ) {
                             status = 'AGENDADO';
                         } 
-                        // >>> ESTADO: EN GESTIÓN (Amarillo) - Aquí entra todo lo que no es vacío
                         else if (
                             rawStatus.includes('TRAMITE') || 
                             rawStatus.includes('GESTION') || 
@@ -394,12 +388,12 @@ export class ImportService {
                             rawStatus.includes('PROCESO') ||
                             rawStatus.includes('ESPERA') ||
                             rawStatus.includes('REQUERIMIENTO') ||
-                            rawStatus.includes('SOLICITADO') || // <--- Lo mueve de Pendiente a Gestión
+                            rawStatus.includes('SOLICITADO') ||
                             rawStatus.includes('ENVIAD') ||
                             rawStatus.includes('RADICAD') ||
-                            rawStatus.includes('DIFERIDO') || // Comodín nuevo
-                            rawStatus.includes('AVAL') || // Comodín nuevo
-                            rawStatus.includes('CAMBIO DE ORDEN') // Comodín nuevo
+                            rawStatus.includes('DIFERIDO') ||
+                            rawStatus.includes('AVAL') ||
+                            rawStatus.includes('CAMBIO DE ORDEN')
                         ) {
                             status = 'EN_GESTION';
                         }
@@ -414,7 +408,7 @@ export class ImportService {
                         const resp = ImportService.cleanText(getVal('responsable'));
                         const tipoCaso = ImportService.cleanText(getVal('tipo_caso'));
                         const cie10Code = ImportService.cleanText(getVal('cie10'));
-                        const descDx = ImportService.cleanText(getVal('desc_dx')); // Descripción textual del DX
+                        const descDx = ImportService.cleanText(getVal('desc_dx'));
                         
                         let fullObs = obsBase;
                         if (barrera && barrera !== 'NO') fullObs += ` | BARRERA: ${barrera}`;
@@ -444,7 +438,7 @@ export class ImportService {
                         const service = ImportService.cleanText(getVal('servicio'));
                         const cups = ImportService.cleanText(getVal('cups'));
                         
-                        // Categoría Híbrida: Intenta CIE-10, si no, intenta TEXTO (Backup)
+                        // Categoría Híbrida: Intenta CIE-10, si no, intenta TEXTO
                         let category = ImportService.getCohortFromCie10(cie10Code); 
                         if (!category) {
                             category = ImportService.getCohortFromText(descDx); // Intento por nombre del diagnóstico
@@ -483,7 +477,7 @@ export class ImportService {
                                     updateData.category = category;
                                 }
                                 
-                                // Si avanzamos de estado (Pendiente -> Gestión -> Agendado -> Realizado)
+                                // Si avanzamos de estado
                                 const statusPriority: Record<string, number> = { 'PENDIENTE': 0, 'EN_GESTION': 1, 'AGENDADO': 2, 'REALIZADO': 3, 'CANCELADO': 4 };
                                 const currentP = statusPriority[exists.status || 'PENDIENTE'] || 0;
                                 const newP = statusPriority[status] || 0;

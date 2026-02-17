@@ -7,9 +7,12 @@ import {
   LayoutDashboard, Users, UserPlus, 
   FolderOpen, Calendar, Settings, 
   LogOut, HeartHandshake, ChevronRight, 
-  LifeBuoy, FileText
+  FileSpreadsheet, FileText, Activity
 } from 'lucide-react';
 import { useUser } from '@/src/app/context/UserContext';
+
+// 🔥 IMPORTAMOS EL COMPONENTE DE DESCARGA
+import DownloadBackupItem from '@/src/app/(private)/navegacion/components/DownloadBackupItem';
 
 interface SidebarProps {
     isOpen: boolean; 
@@ -20,39 +23,37 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
     const pathname = usePathname();
     const { user, logout } = useUser();
     const [isHovered, setIsHovered] = useState(false);
-
-    // Lógica maestra: Se expande si isOpen es true O si el mouse está encima
+    
+    // Lógica maestra: Idéntica al Admin
     const isExpanded = isOpen || isHovered;
-
-    // ✅ RUTA BASE DEL NAVEGADOR
     const basePath = `/navegacion/atencion`;
 
     const menuGroups = useMemo(() => [
         {
-            label: "MI GESTIÓN",
+            label: "PRINCIPAL",
             items: [
-                { name: 'Mi Tablero', href: `${basePath}`, icon: LayoutDashboard }, // Dashboard Operativo
-                { name: 'Mis Casos', href: `${basePath}/casos`, icon: FolderOpen }, // Lista de mis pacientes
-                { name: 'Calendario', href: `${basePath}/calendario`, icon: Calendar },     // Mi calendario
+                { name: 'Mi Tablero', href: `${basePath}`, icon: LayoutDashboard },
+                { name: 'Calendario', href: `${basePath}/calendario`, icon: Calendar },
             ]
         },
         {
-            label: "PACIENTES",
+            label: "GESTIÓN",
             items: [
-                { name: 'Nuevo Paciente', href: `${basePath}/nuevo`, icon: UserPlus },
-                { name: 'Directorio', href: `${basePath}/directorio`, icon: Users }, // Solo lectura
+                { name: 'Directorio', href: `${basePath}/directorio`, icon: Users },
+                { name: 'Nuevo Registro', href: `${basePath}/nuevo`, icon: UserPlus },
+                { name: 'Mis Casos', href: `${basePath}/casos`, icon: FolderOpen },
+                { name: 'Carga Masiva', href: `${basePath}/importar`, icon: FileSpreadsheet },
             ]
         },
         {
-            label: "AYUDA",
+            label: "SISTEMA",
             items: [
                 { name: 'Bitácora', href: `${basePath}/bitacora`, icon: FileText },
-                { name: 'Soporte', href: `${basePath}/soporte`, icon: LifeBuoy },
+                { name: 'Soporte', href: `${basePath}/soporte`, icon: Settings },
             ]
-        },
+        }
     ], [basePath]);
 
-    // Helper para iniciales del usuario
     const getInitials = (name?: string) => name ? name.substring(0, 2).toUpperCase() : 'NV';
 
     return (
@@ -61,18 +62,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             onMouseLeave={() => setIsHovered(false)}
             className={`
                 fixed top-0 left-0 z-50 h-screen 
-                bg-[#0b1121] border-r border-slate-800/80
+                bg-[#020617] border-r border-slate-800/40
                 flex flex-col 
                 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
-                ${isExpanded ? 'w-64 shadow-2xl shadow-blue-900/20' : 'w-20'}
+                ${isExpanded ? 'w-64 shadow-2xl shadow-emerald-900/10' : 'w-20'}
                 overflow-hidden
             `}
         >
-            {/* --- 1. LOGO HEADER --- */}
+            {/* --- 1. LOGO HEADER (Mismo tamaño h-20 que Admin) --- */}
             <div className="h-20 flex items-center justify-center relative w-full border-b border-white/5">
                 <div className={`flex items-center gap-3 transition-all duration-300 ${isExpanded ? 'px-6 w-full justify-start' : 'justify-center'}`}>
                     
-                    {/* Icono del Logo (Diferente color para diferenciar del Admin) */}
                     <div className="relative flex-shrink-0">
                         <div className="absolute -inset-2 bg-emerald-500/20 rounded-full blur-md animate-pulse"></div>
                         <div className="relative bg-emerald-600 p-2 rounded-xl text-white shadow-inner">
@@ -80,7 +80,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                         </div>
                     </div>
 
-                    {/* Texto del Logo */}
                     <div className={`flex flex-col overflow-hidden whitespace-nowrap transition-all duration-300 ${isExpanded ? 'opacity-100 max-w-[200px]' : 'opacity-0 max-w-0'}`}>
                         <h1 className="text-lg font-bold text-white tracking-tight leading-none">Vidanova</h1>
                         <span className="text-[9px] text-emerald-400 font-bold tracking-[0.15em] uppercase">Atención</span>
@@ -101,7 +100,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                             </span>
                         </div>
                         
-                        {/* Separador cuando está cerrado */}
                         {!isExpanded && (
                             <div className="mx-auto w-8 h-px bg-slate-800/50 mb-3" />
                         )}
@@ -116,8 +114,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                                         className={`
                                             group relative flex items-center h-12 rounded-xl transition-all duration-200 cursor-pointer overflow-hidden
                                             ${isActive 
-                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
-                                                : 'text-slate-400 hover:bg-slate-800/50 hover:text-blue-200'
+                                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' 
+                                                : 'text-slate-400 hover:bg-slate-800/50 hover:text-emerald-200'
                                             }
                                             ${isExpanded ? 'px-3 mx-0' : 'justify-center mx-1'}
                                         `}
@@ -131,33 +129,45 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                                         </span>
 
                                         {isActive && isExpanded && <ChevronRight size={14} className="ml-auto opacity-50" />}
-                                        {isActive && !isExpanded && <div className="absolute right-2 top-2 w-1.5 h-1.5 bg-blue-400 rounded-full shadow-[0_0_8px_currentColor]"></div>}
+                                        {isActive && !isExpanded && <div className="absolute right-2 top-2 w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_currentColor]"></div>}
                                     </Link>
                                 );
                             })}
                         </div>
                     </div>
                 ))}
+
+                {/* --- SECCIÓN EXTRA: BACKUP --- */}
+                <div className="mt-2 border-t border-slate-800/50 pt-4">
+                    <div className={`px-3 mb-2 transition-all duration-300 overflow-hidden whitespace-nowrap ${isExpanded ? 'h-auto opacity-100' : 'h-0 opacity-0'}`}>
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
+                            UTILIDADES
+                        </span>
+                    </div>
+                    <div className={isExpanded ? 'px-0' : 'px-1'}>
+                        <DownloadBackupItem collapsed={!isExpanded} />
+                    </div>
+                </div>
+
             </nav>
 
-            {/* --- 3. PIE DE PÁGINA (Perfil Operativo) --- */}
+            {/* --- 3. PIE DE PÁGINA (Ajustado a w-8 h-8 como Admin) --- */}
             <div className="p-3 border-t border-white/5 bg-[#080c17]">
                 <div className={`flex items-center gap-3 rounded-xl p-2 transition-all duration-300 ${isExpanded ? 'bg-slate-900/50 border border-slate-800' : 'justify-center'}`}>
                     
-                    {/* Avatar con Color Dinámico del Usuario */}
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${user?.avatarColor || 'from-emerald-500 to-teal-600'} flex items-center justify-center text-white text-[10px] font-black shadow-lg flex-shrink-0 cursor-default ring-2 ring-[#0b1121]`}>
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-[10px] font-black shadow-lg flex-shrink-0 cursor-default ring-2 ring-[#0b1121]">
                         {getInitials(user?.name)}
                     </div>
 
                     <div className={`flex-grow overflow-hidden transition-all duration-300 ${isExpanded ? 'w-auto opacity-100' : 'w-0 opacity-0'}`}>
                         <p className="text-xs font-bold text-white truncate">{user?.name || 'Navegador'}</p>
-                        <p className="text-[9px] text-slate-500 truncate">En línea</p>
+                        <p className="text-[9px] text-emerald-500 font-bold truncate tracking-tighter uppercase">En línea</p>
                     </div>
 
                     <button 
                         onClick={logout}
                         title="Salir"
-                        className={`text-slate-400 hover:text-red-400 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors flex-shrink-0 ${!isExpanded && 'hidden'}`}
+                        className={`text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-1.5 rounded-lg transition-colors flex-shrink-0 ${!isExpanded && 'hidden'}`}
                     >
                         <LogOut size={16} />
                     </button>

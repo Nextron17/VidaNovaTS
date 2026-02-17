@@ -80,7 +80,7 @@ export class AuditController {
         }
     }
 
-        // 2. CORREGIR FECHAS (Acción)
+        // 2. CORREGIR FECHAS 
         static fixIncoherentDates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
@@ -106,7 +106,7 @@ export class AuditController {
         }
     }
 
-        // 3. FUSIÓN DE DUPLICADOS (Acción)
+        // 3. FUSIÓN DE DUPLICADOS 
         static mergeDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
@@ -137,7 +137,7 @@ export class AuditController {
                         patientId: group.patientId,
                         dateRequest: group.dateRequest
                     },
-                    order: [['updatedAt', 'DESC']], // El primero es el MASTER (más reciente)
+                    order: [['updatedAt', 'DESC']], // El primero es el MASTER 
                     transaction: t
                 });
 
@@ -180,7 +180,7 @@ export class AuditController {
         }
     }
     
-        // 4. LIMPIEZA DE DUPLICADOS (Acción Destructiva)
+        // 4. LIMPIEZA DE DUPLICADOS
         static cleanDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {

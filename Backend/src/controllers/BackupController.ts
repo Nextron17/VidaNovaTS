@@ -14,9 +14,9 @@ export class BackupController {
             workbook.creator = 'Vidanova System';
             workbook.created = new Date();
 
-            // ==========================================
+            
             // HOJA 1: DIRECTORIO (Datos Demográficos)
-            // ==========================================
+            
             const sheetPatients = workbook.addWorksheet('Directorio Pacientes');
             
             sheetPatients.columns = [
@@ -59,9 +59,9 @@ export class BackupController {
                 });
             });
 
-            // ==========================================
+            
             // HOJA 2: INFORME DE GESTIÓN (Detallado / Sábana)
-            // ==========================================
+            
             const sheetHistory = workbook.addWorksheet('Informe de Gestión');
 
             sheetHistory.columns = [

@@ -1,11 +1,11 @@
 # Dependencias
 node_modules/
 
-# Archivos de compilación (TypeScript -> JS)
+# Archivos de compilación 
 dist/
 build/
 
-# Variables de entorno (¡NUNCA SUBIR!)
+# Variables de entorno 
 .env
 .env.local
 .env.*.local

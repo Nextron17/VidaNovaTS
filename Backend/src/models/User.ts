@@ -20,15 +20,11 @@ export class User extends Model {
     })
     documentNumber!: string;
 
-    /**
-     * Email ahora es opcional. 
-     * Se mantiene solo por referencia o futuras notificaciones.
-     */
-   // En tu Backend: models/User.ts
+
     @Column({
         type: DataType.STRING,
-        allowNull: true, // ✅ Cambiado de false a true
-        unique: true     // Mantiene la unicidad solo si el correo existe
+        allowNull: true,
+        unique: true    
     })
     email!: string;
 
@@ -41,7 +37,7 @@ export class User extends Model {
     @Column({
         type: DataType.ENUM(
             'SUPER_ADMIN',
-            'COORDINATOR_NAVIGATOR', // ✅ Cambio de COORDINATOR a COORDINATOR_NAVIGATOR
+            'COORDINATOR_NAVIGATOR',
             'NAVIGATOR',
             'AUDITOR'
         ),
@@ -67,14 +63,14 @@ export class User extends Model {
     })
     avatarColor!: string;
 
-    // --- SEGURIDAD Y RECUPERACIÓN ---
+    //  SEGURIDAD Y RECUPERACIÓN 
     @Column({ type: DataType.STRING, allowNull: true })
     resetPasswordToken!: string | null;
 
     @Column({ type: DataType.DATE, allowNull: true })
     resetPasswordExpires!: Date | null;
 
-    // --- HOOKS (Lógica automática) ---
+    //  HOOKS (Lógica automática) 
 
     @BeforeCreate
     @BeforeUpdate
@@ -99,18 +95,12 @@ export class User extends Model {
         }
     }
 
-    // --- MÉTODOS DE INSTANCIA ---
-
-    /**
-     * Compara una contraseña plana con el hash guardado
-     */
+    //  MÉTODOS DE INSTANCIA 
     async checkPassword(password: string): Promise<boolean> {
         return await bcrypt.compare(password, this.password);
     }
 
-    /**
-     * Devuelve un objeto limpio del usuario (sin password) para el frontend
-     */
+
     toJSON() {
         const values = Object.assign({}, this.get());
         delete values.password;

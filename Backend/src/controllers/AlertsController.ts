@@ -6,7 +6,7 @@ import { sequelize } from '../config/db';
 
 export class AlertsController {
 
-    // 1. OBTENER DETALLE DE ALERTAS (Para la página de alertas)
+    // 1. OBTENER DETALLE DE ALERTAS 
     static getAlerts = async (req: Request, res: Response) => {
         try {
             const thirtyDaysAgo = new Date();
@@ -81,7 +81,7 @@ export class AlertsController {
         }
     }
 
-    // 2. OBTENER CONTEO TOTAL (Para la campana del Header)
+    // 2. OBTENER CONTEO TOTAL
     static getAlertCount = async (req: Request, res: Response) => {
         try {
             const thirtyDaysAgo = new Date();

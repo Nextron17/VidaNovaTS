@@ -6,7 +6,6 @@ const router = Router();
 
 router.use(authenticate);
 
-// GET /api/alerts
 router.get('/', AlertsController.getAlerts);
 router.get('/count', AlertsController.getAlertCount);
 export default router;
