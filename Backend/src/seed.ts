@@ -1,5 +1,5 @@
-import { sequelize } from './config/db';
-import { User } from './models/User';
+import { sequelize } from './core/config/db';
+import { User } from './modules/usuarios/models/User';
 import colors from 'colors';
 
 const seedAdmin = async () => {

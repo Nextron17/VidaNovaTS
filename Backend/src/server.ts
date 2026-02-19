@@ -3,15 +3,10 @@ import morgan from 'morgan';
 import cors from 'cors';
 import { createServer } from 'http';
 
-// Importación de Rutas
-import authRoutes from './routes/authRoutes';
-import auditRoutes from './routes/auditRoutes';
-import userRoutes from './routes/userRoutes';
-import patientRoutes from './routes/patientRoutes';
-import followUpRoutes from './routes/followUpRoutes';
-import analyticsRoutes from './routes/analyticsRoutes'; 
-import alertRoutes from './routes/alertRoutes'; 
-import backupRoutes from './routes/backupRoutes'; 
+// 1. IMPORTACIÓN DE RUTAS (NUEVA ARQUITECTURA MODULAR)
+import authRoutes from './modules/usuarios/routes/authRoutes';
+import userRoutes from './modules/usuarios/routes/userRoutes';
+import navegacionRoutes from './modules/navegacion/routes/navegacionRoutes';
 
 const app = express();
 
@@ -20,16 +15,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 2. CORS MEJORADO
-// Agregamos explícitamente localhost con IP y nombre para evitar fallos de resolución
-const allowedOrigins = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    process.env.FRONTEND_URL
-].filter(Boolean) as string[];
-
-// Borra el bloque anterior y pega este:
+// Permite cualquier origen dinámicamente en desarrollo
 app.use(cors({
-    origin: true, // Permite cualquier origen dinámicamente en desarrollo
+    origin: true, 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
     credentials: true,
@@ -38,17 +26,15 @@ app.use(cors({
 
 app.use(morgan('dev'));
 
-// 3. DEFINICIÓN DE RUTAS
+// 3. MONTAJE DE MÓDULOS (Endpoints)
+// Todas las rutas de usuarios y autenticación
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/patients', patientRoutes);
-app.use('/api/followups', followUpRoutes);
-app.use('/api/audit', auditRoutes);
-app.use('/api/analytics', analyticsRoutes); 
-app.use('/api/alerts', alertRoutes); 
-app.use('/api/backup', backupRoutes);
 
-// Health Check
+// ¡El maestro! Todas las rutas de pacientes, seguimientos, alertas y auditoría pasan por aquí
+app.use('/api/navegacion', navegacionRoutes); 
+
+// Health Check (Para verificar que el servidor está vivo)
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 

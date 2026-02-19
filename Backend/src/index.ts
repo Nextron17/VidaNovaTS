@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config(); 
 
 import { server } from './server'; 
-import { sequelize } from './config/db'; 
+import { sequelize } from './core/config/db'; 
 
 const port = process.env.PORT || 4000;
 
@@ -13,8 +13,6 @@ async function startServer() {
         await sequelize.authenticate();
         console.log(colors.green('✅ [DATABASE] Conexión establecida.'));
 
-        // --- PASO CRÍTICO ---
-        // Usamos 'force: true' para destruir la tabla con error y crearla limpia.
         console.log(colors.magenta('🚀 [DATABASE] Reconstruyendo tabla User (Estructura limpia)...'));
         await sequelize.sync({ alter: true }); 
         

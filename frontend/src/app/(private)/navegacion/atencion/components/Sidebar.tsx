@@ -39,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
         {
             label: "GESTIÓN",
             items: [
-                { name: 'Directorio', href: `${basePath}/directorio`, icon: Users },
+                { name: 'Pacientes', href: `${basePath}/pacientes`, icon: Users },
                 { name: 'Nuevo Registro', href: `${basePath}/nuevo`, icon: UserPlus },
                 { name: 'Mis Casos', href: `${basePath}/casos`, icon: FolderOpen },
                 { name: 'Carga Masiva', href: `${basePath}/importar`, icon: FileSpreadsheet },

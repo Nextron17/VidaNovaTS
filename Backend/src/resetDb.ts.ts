@@ -1,6 +1,6 @@
-import { sequelize } from './config/db';
-import { Patient } from './models/Patient';
-import { FollowUp } from './models/FollowUp';
+import { sequelize } from './core/config/db';
+import { Patient } from './modules/navegacion/models/Patient';
+import { FollowUp } from './modules/navegacion/models/FollowUp';
 
 const resetDatabase = async () => {
     console.log('\n☢️  ADVERTENCIA DE SEGURIDAD ☢️');
