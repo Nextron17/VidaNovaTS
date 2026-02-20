@@ -65,7 +65,7 @@ function ProfileContent() {
     if (!id) return; 
     const fetchDetails = async () => {
       try {
-        const res = await api.get(`/patients/${id}`);
+        const res = await api.get(`/navegacion/patients/${id}`);
         if (res.data.success) {
             // Ordenar historial por fecha descendente (más reciente primero)
             const sortedData = res.data.data;

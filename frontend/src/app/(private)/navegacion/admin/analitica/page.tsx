@@ -36,7 +36,7 @@ export default function AnaliticaPage() {
       setError(false);
       try {
           // Enviamos el año como parámetro
-          const res = await api.get(`/analytics/dashboard?year=${year}`);
+          const res = await api.get(`/navegacion/analytics/dashboard?year=${year}`);
           
           if (res.data.success) {
               setTotalPatients(res.data.totalPatients);

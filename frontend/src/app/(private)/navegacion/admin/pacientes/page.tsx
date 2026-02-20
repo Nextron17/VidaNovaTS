@@ -70,7 +70,7 @@ export default function PacientesPage() {
     abortControllerRef.current = controller;
 
     try {
-      const res = await api.get(`/patients`, {
+      const res = await api.get(`/navegacion/patients`, {
         params: { page, limit: 12, search: searchTerm },
         signal: controller.signal
       });
@@ -113,7 +113,7 @@ export default function PacientesPage() {
     }
 
     try {
-        await api.delete(`/patients/${id}`);
+        await api.delete(`/navegacion/patients/${id}`);
         fetchPatients(); 
     } catch (error) {
         alert("❌ Error al eliminar. Verifica que el paciente no tenga citas activas.");

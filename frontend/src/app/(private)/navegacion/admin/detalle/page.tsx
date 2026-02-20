@@ -34,7 +34,7 @@ function DetalleContent() {
     if (!id) return;
     const fetchData = async () => {
         try {
-            const res = await api.get(`/followups/${id}`); 
+            const res = await api.get(`/navegacion/followups/${id}`); 
             setData(res.data);
         } catch (error) {
             console.error("Error loading detail:", error);

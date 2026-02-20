@@ -25,10 +25,11 @@ export default function AuditoriaPage() {
 
   const [duplicates, setDuplicates] = useState<any[]>([]);
 
-  // Función para cargar datos
+  // 1. CARGAR DATOS (Ruta modularizada)
   const fetchData = async () => {
       try {
-          const res = await api.get('/audit/stats'); 
+          // Ajustado a la nueva estructura del backend
+          const res = await api.get('/navegacion/audit/stats'); 
           if (res.data.success) {
               setStats(res.data.stats);
               setDuplicates(res.data.duplicates || []);
@@ -49,7 +50,7 @@ export default function AuditoriaPage() {
       if (window.confirm(`¿Corregir ${stats.fechas_malas} fechas invertidas?`)) {
           setFixing(true);
           try {
-              const res = await api.post('/audit/fix-dates');
+              const res = await api.post('/navegacion/audit/fix-dates');
               if (res.data.success) {
                   alert(res.data.message);
                   fetchData(); 
@@ -74,7 +75,7 @@ export default function AuditoriaPage() {
       if (window.confirm(msg)) {
           setFixing(true);
           try {
-              const res = await api.post('/audit/merge-duplicates');
+              const res = await api.post('/navegacion/audit/merge-duplicates');
               if (res.data.success) {
                   alert(res.data.message);
                   fetchData(); 
@@ -92,7 +93,8 @@ export default function AuditoriaPage() {
       if (window.confirm("¿Estás seguro de ELIMINAR permanentemente los duplicados viejos?")) {
           setFixing(true);
           try {
-              const res = await api.delete('/audit/fix-duplicates');
+              // Corregido: 'clean-duplicates' coincide con el backend modular
+              const res = await api.delete('/navegacion/audit/clean-duplicates');
               if (res.data.success) {
                   alert(res.data.message);
                   fetchData(); 
@@ -111,7 +113,11 @@ export default function AuditoriaPage() {
       { label: 'Incoherencia de Fechas', count: stats.fechas_malas, icon: AlertOctagon },
   ];
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={40}/></div>;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-blue-600" size={40}/>
+    </div>
+  );
 
   return (
     <div className="w-full min-h-screen bg-slate-50 p-6 md:p-10 font-sans text-slate-800 pb-32">
@@ -120,11 +126,15 @@ export default function AuditoriaPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
         <div>
             <div className="flex items-center gap-3 mb-2">
-                <Link href="/navegacion/admin" className="bg-white p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm hover:shadow-md"><ArrowLeft size={20}/></Link>
-                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><Stethoscope size={24} strokeWidth={2.5}/></div>
+                <Link href="/navegacion/admin" className="bg-white p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm hover:shadow-md">
+                    <ArrowLeft size={20}/>
+                </Link>
+                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20">
+                    <Stethoscope size={24} strokeWidth={2.5}/>
+                </div>
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight">Diagnóstico de Datos</h1>
             </div>
-            <p className="text-slate-500 font-medium ml-14 text-sm">Auditoría y reparación técnica en tiempo real.</p>
+            <p className="text-slate-500 font-medium ml-14 text-sm">Auditoría técnica del módulo de navegación.</p>
         </div>
       </div>
 
@@ -134,7 +144,6 @@ export default function AuditoriaPage() {
           <StatCard label="Pacientes Únicos" value={stats.pacientes.toLocaleString()} icon={Users} color="indigo" />
           <StatCard label="Sin EPS Asignada" value={stats.sin_eps} icon={FileWarning} color="orange" isWarning={stats.sin_eps > 0} />
           
-          {/* TARJETA INTELIGENTE DE FECHAS */}
           {stats.fechas_malas > 0 ? (
               <div className="bg-amber-50 p-5 rounded-[1.5rem] shadow-sm border border-amber-200 flex flex-col justify-between hover:shadow-md transition-all">
                   <div className="flex items-start gap-4">
@@ -165,13 +174,14 @@ export default function AuditoriaPage() {
               <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white overflow-hidden h-full flex flex-col">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                       <div>
-                          <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Copy className="text-slate-400" size={20}/> Posibles Duplicados</h3>
-                          <p className="text-xs text-slate-500 mt-1 font-medium">Registros idénticos (Paciente + Fecha + Procedimiento).</p>
+                          <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                              <Copy className="text-slate-400" size={20}/> Posibles Duplicados
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1 font-medium">Registros con coincidencia exacta de Cédula y Fecha.</p>
                       </div>
                       
                       {duplicates.length > 0 && (
                           <div className="flex items-center gap-2">
-                              {/* Botón Fusionar */}
                               <button 
                                 onClick={handleMergeDuplicates}
                                 disabled={fixing}
@@ -181,7 +191,6 @@ export default function AuditoriaPage() {
                                   Fusionar
                               </button>
                               
-                              {/* Botón Limpiar (Oculto en móvil para seguridad) */}
                               <button 
                                 onClick={handleCleanDuplicates}
                                 disabled={fixing}
@@ -197,19 +206,33 @@ export default function AuditoriaPage() {
                       <table className="w-full text-left border-collapse">
                           <thead className="bg-slate-50/80 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                               <tr>
-                                  <th className="p-5 w-32">Documento</th><th className="p-5">Paciente</th><th className="p-5 w-32">Fecha</th><th className="p-5 text-center w-24">Cant.</th>
+                                  <th className="p-5 w-32">Documento</th>
+                                  <th className="p-5">Paciente</th>
+                                  <th className="p-5 w-32">Fecha</th>
+                                  <th className="p-5 text-center w-24">Cant.</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 text-sm">
                               {duplicates.length === 0 ? (
-                                  <tr><td colSpan={4} className="p-10 text-center text-slate-400"><div className="flex flex-col items-center gap-2"><CheckCircle2 size={32} className="text-emerald-400"/><span className="font-bold text-emerald-600">Base de datos limpia</span></div></td></tr>
+                                  <tr>
+                                      <td colSpan={4} className="p-10 text-center text-slate-400">
+                                          <div className="flex flex-col items-center gap-2">
+                                              <CheckCircle2 size={32} className="text-emerald-400"/>
+                                              <span className="font-bold text-emerald-600">Base de datos sin duplicados</span>
+                                          </div>
+                                      </td>
+                                  </tr>
                               ) : (
                                   duplicates.map((item: any, idx: number) => (
                                       <tr key={idx} className="hover:bg-slate-50/80 transition-colors group">
                                           <td className="p-5 font-mono text-slate-500 font-bold text-xs">{item.cedula}</td>
                                           <td className="p-5 font-bold text-slate-700">{item.nombre}</td>
                                           <td className="p-5 text-slate-600 font-medium text-xs">{new Date(item.fecha).toLocaleDateString()}</td>
-                                          <td className="p-5 text-center"><span className="inline-flex items-center justify-center w-6 h-6 rounded bg-rose-100 text-rose-600 font-bold text-xs">{item.count}</span></td>
+                                          <td className="p-5 text-center">
+                                              <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-rose-100 text-rose-600 font-bold text-xs">
+                                                  {item.count}
+                                              </span>
+                                          </td>
                                       </tr>
                                   ))
                               )}
@@ -222,12 +245,30 @@ export default function AuditoriaPage() {
           {/* LISTA DE CHEQUEO */}
           <div className="lg:col-span-1">
               <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white overflow-hidden h-full flex flex-col">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50/50"><h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><ShieldAlert className="text-slate-400" size={20}/> Calidad de Datos</h3><p className="text-xs text-slate-500 mt-1 font-medium">Semáforo de integridad.</p></div>
+                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                      <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                          <ShieldAlert className="text-slate-400" size={20}/> Calidad de Datos
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 font-medium">Análisis de integridad.</p>
+                  </div>
                   <div className="p-5 space-y-4 flex-1">
                       {qualityChecks.map((check, idx) => (
                           <div key={idx} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${check.count > 0 ? 'bg-amber-50/50 border-amber-100' : 'bg-white border-slate-100'}`}>
-                              <div className="flex items-center gap-3"><div className={`p-2.5 rounded-xl ${check.count > 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}><check.icon size={18} strokeWidth={2.5}/></div><span className={`text-xs font-bold ${check.count > 0 ? 'text-amber-900' : 'text-slate-600'}`}>{check.label}</span></div>
-                              {check.count > 0 ? (<span className="text-lg font-black text-amber-600">{check.count}</span>) : (<div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-full"><CheckCircle2 size={16} strokeWidth={3}/></div>)}
+                              <div className="flex items-center gap-3">
+                                  <div className={`p-2.5 rounded-xl ${check.count > 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
+                                      <check.icon size={18} strokeWidth={2.5}/>
+                                  </div>
+                                  <span className={`text-xs font-bold ${check.count > 0 ? 'text-amber-900' : 'text-slate-600'}`}>
+                                      {check.label}
+                                  </span>
+                              </div>
+                              {check.count > 0 ? (
+                                  <span className="text-lg font-black text-amber-600">{check.count}</span>
+                              ) : (
+                                  <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-full">
+                                      <CheckCircle2 size={16} strokeWidth={3}/>
+                                  </div>
+                              )}
                           </div>
                       ))}
                   </div>
@@ -239,12 +280,23 @@ export default function AuditoriaPage() {
 }
 
 function StatCard({ label, value, icon: Icon, color, isWarning }: any) {
-    const colors: any = { blue: "bg-blue-50 text-blue-600", indigo: "bg-indigo-50 text-indigo-600", orange: "bg-orange-50 text-orange-600", red: "bg-rose-50 text-rose-600", emerald: "bg-emerald-50 text-emerald-600" };
+    const colors: any = { 
+        blue: "bg-blue-50 text-blue-600", 
+        indigo: "bg-indigo-50 text-indigo-600", 
+        orange: "bg-orange-50 text-orange-600", 
+        red: "bg-rose-50 text-rose-600", 
+        emerald: "bg-emerald-50 text-emerald-600" 
+    };
     const activeColor = colors[color] || colors.blue;
     return (
         <div className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-100 flex items-start gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-            <div className={`p-3.5 rounded-2xl ${activeColor} shadow-inner`}><Icon size={24} strokeWidth={2.5}/></div>
-            <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p><p className="text-2xl font-black text-slate-900">{value}</p></div>
+            <div className={`p-3.5 rounded-2xl ${activeColor} shadow-inner`}>
+                <Icon size={24} strokeWidth={2.5}/>
+            </div>
+            <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+                <p className="text-2xl font-black text-slate-900">{value}</p>
+            </div>
         </div>
     );
 }

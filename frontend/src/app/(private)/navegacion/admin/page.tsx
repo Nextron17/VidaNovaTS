@@ -175,7 +175,7 @@ export default function AdminDashboardPage() {
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
 
-        const res = await api.get('/patients', { params });
+        const res = await api.get('/navegacion/patients', { params });
         const data = res.data;
 
         if (data.success) {
@@ -230,7 +230,7 @@ export default function AdminDashboardPage() {
     if(!confirm("¿Deseas normalizar la base de datos a las 9 Modalidades Oficiales?")) return;
     setLoading(true);
     try {
-        const res = await api.post('/patients/fix-categories');
+        const res = await api.post('/navegacion/patients/fix-categories');
         alert(res.data.message);
         fetchData();
     } catch (error) {
@@ -243,7 +243,7 @@ export default function AdminDashboardPage() {
   const handleMassUpdate = async () => {
     if (!massUpdateData.status && !massUpdateData.observation) return;
     try {
-        const res = await api.put('/patients/bulk-update', {
+        const res = await api.put('/navegacion/patients/bulk-update', {
             ids: seleccionados,
             status: massUpdateData.status,
             observation: massUpdateData.observation

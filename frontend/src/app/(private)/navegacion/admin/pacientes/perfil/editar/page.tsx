@@ -41,7 +41,7 @@ function EditarPacienteContent() {
     const fetchPaciente = async () => {
       if (!id) return;
       try {
-        const response = await api.get(`/patients/${id}`);
+        const response = await api.get(`/navegacion/patients/${id}`);
         
         if (response.data.success) {
             const data = response.data.data;
@@ -95,7 +95,7 @@ function EditarPacienteContent() {
     setIsLoading(true);
 
     try {
-      await api.put(`/patients/${id}`, formData);
+      await api.put(`/navegacion/patients/${id}`, formData);
       alert("✅ Paciente actualizado correctamente.");
       router.push(`/navegacion/admin/pacientes/perfil?id=${id}`);
       router.refresh(); 
@@ -110,7 +110,7 @@ function EditarPacienteContent() {
   const handleDelete = async () => {
     if(!confirm("⚠️ ¿Estás seguro de eliminar este paciente?\n\nSe borrará todo su historial.")) return;
     try {
-        await api.delete(`/patients/${id}`);
+        await api.delete(`/navegacion/patients/${id}`);
         alert("Paciente eliminado.");
         router.push("/navegacion/admin/pacientes"); 
     } catch (error) {

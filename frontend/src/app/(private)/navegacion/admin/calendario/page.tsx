@@ -115,7 +115,7 @@ export default function AgendaAtencionPage() {
     setLoading(true);
 
     try {
-        const res = await api.get('/patients', {
+        const res = await api.get('/navegacion/patients', {
             params: {
                 page: 1, limit: 1500, 
                 startDate: startStr, 

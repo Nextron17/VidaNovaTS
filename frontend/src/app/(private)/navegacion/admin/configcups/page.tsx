@@ -84,7 +84,7 @@ export default function ConfigCupsPage() {
   const fetchCups = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/patients/cups"); 
+      const res = await api.get("/navegacion/patients/cups"); 
       if (res.data.success) {
         const mappedData = (res.data.data || []).map((item: any) => ({
             ...item,
@@ -102,7 +102,7 @@ export default function ConfigCupsPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await api.post("/patients/cups/sync", {}, { timeout: 120000 }); 
+      const res = await api.post("/navegacion/patients/cups/sync", {}, { timeout: 120000 }); 
       if (res.data.success) {
         alert(`Sincronización completa.`);
         fetchCups();
@@ -123,7 +123,7 @@ export default function ConfigCupsPage() {
 
     try {
       setLoading(true);
-      const res = await api.put("/patients/cups/bulk-update", {
+      const res = await api.put("/navegacion/patients/cups/bulk-update", {
         ids: selectedItems,
         grupo: newGroup
       });

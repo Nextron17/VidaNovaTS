@@ -59,7 +59,7 @@ function GestionEdicionDetalle() {
       if (!id) return;
       setIsFetching(true);
       try {
-        const res = await api.get(`/followups/${id}`);
+        const res = await api.get(`/navegacion/followups/${id}`);
         const data = res.data.data || res.data;
 
         if (data) {
@@ -138,7 +138,7 @@ function GestionEdicionDetalle() {
             dateAppointment: formData.fecha_cita || null,
         };
 
-        await api.put(`/followups/${id}`, payload);
+        await api.put(`/navegacion/followups/${id}`, payload);
         router.push(`/navegacion/admin/pacientes/perfil?id=${formData.patientId}`);
     } catch (error) {
         alert("Error al actualizar la gestión.");

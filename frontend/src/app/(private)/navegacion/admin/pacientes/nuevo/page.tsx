@@ -48,7 +48,7 @@ export default function CrearPacientePage() {
     }
 
     try {
-      const res = await api.post("/patients", formData);
+      const res = await api.post("/navegacion/patients", formData);
       
       if (res.data.success || res.status === 201 || res.status === 200) {
         // Redirigir a la lista con un flag de éxito

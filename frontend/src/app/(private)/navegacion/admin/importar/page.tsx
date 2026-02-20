@@ -52,7 +52,7 @@ export default function ImportarDataPage() {
 
     try {
       // Petición al endpoint que creamos: /api/patients/upload
-      const res = await api.post("/patients/upload", formData, {
+      const res = await api.post("/navegacion/patients/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
