@@ -9,19 +9,24 @@ const port = process.env.PORT || 4000;
 
 async function startServer() {
     try {
-        // Esto validará si la red de la empresa nos deja pasar
+        // Conectar a Supabase antes de abrir el puerto
         await connectDB();
 
         server.listen(port, () => {
-            console.log(colors.cyan.bold(`\n🚀 SERVIDOR BACKEND VIDA NOVA ACTIVO`));
+            console.log(colors.cyan.bold(`\n🚀 SERVIDOR VIDA NOVA ACTIVO`));
             console.log(colors.white(`   👉 Puerto: ${port}`));
-            console.log(colors.white(`   👉 Red: `) + colors.green(`Empresarial Protegida`));
+            console.log(colors.green(`   👉 Estado: DB Sincronizada y Lista\n`));
         });
 
     } catch (error: any) {
-        console.error(colors.red('\n❌ ERROR FATAL AL ARRANCAR:'), error.message);
+        console.error(colors.red('\n❌ ERROR CRÍTICO AL INICIAR:'), error.message);
         process.exit(1); 
     }
 }
+
+// Manejar cierres inesperados (como desconexiones de DB)
+process.on('unhandledRejection', (err: any) => {
+    console.log(colors.bgRed.white(` ⚠️ Error no manejado: ${err.message} `));
+});
 
 startServer();
