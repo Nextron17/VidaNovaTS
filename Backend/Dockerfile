@@ -1,18 +1,6 @@
-FROM node:20-slim AS builder
-
-WORKDIR /app
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-
-COPY package*.json ./
-
-RUN npm install --network-timeout=100000
-
-COPY . .
-RUN npm run build
-
 FROM node:20-slim
 
+# 1. Instalamos Chromium y lo mínimo necesario de una vez
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -27,15 +15,22 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Le decimos a tu código de Node dónde encontrar este Chromium
+# 2. Variables para que Puppeteer no intente descargar nada y use lo que instalamos arriba
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
-# Traemos solo lo necesario de la Etapa 1
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# 3. Instalación optimizada
+COPY package*.json ./
+# --only=production evita instalar librerías de test/desarrollo que no sirven en la nube
+RUN npm install --only=production --network-timeout=100000
+
+# 4. Copiamos el resto del código
+COPY . .
+
+# 5. Compilamos (Si esto falla por RAM, tendremos que subir el código ya compilado)
+RUN npm run build
 
 EXPOSE 4000
 
