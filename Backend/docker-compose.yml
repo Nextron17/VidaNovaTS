@@ -1,31 +1,46 @@
 version: '3.8'
 
 services:
-  # Servicio de Base de Datos
-  db:
-    image: postgres:15-alpine
-    container_name: vidanova_postgres
+  # BACKEND VIDA NOVA
+  api:
+    build: .
+    container_name: vidanova_api
     restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin  # Debe coincidir con tu .env (para desarrollo)
-      POSTGRES_DB: vidanova_db
     ports:
-      - "5432:5432"
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  # Opcional: Interfaz web para ver la BD (PgAdmin)
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: vidanova_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@vidanova.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+    networks:
+      - vidanova_net
     depends_on:
       - db
 
+  # BASE DE DATOS LOCAL (Auxiliar)
+  db:
+    image: postgres:15-alpine
+    container_name: vidanova_db_local
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-admin}
+      POSTGRES_DB: ${DB_NAME:-vidanova_db}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - vidanova_net
+
+networks:
+  vidanova_net:
+    driver: bridge
+
 volumes:
-  postgres_data:
+  pgdata:
