@@ -9,8 +9,18 @@ import { User } from '../../modules/usuarios/models/User';
 import { Patient } from '../../modules/navegacion/models/Patient';
 import { FollowUp } from '../../modules/navegacion/models/FollowUp';
 
-// Carga el .env de forma más segura
+// Carga el .env
 dotenv.config();
+
+// VALIDACIÓN CRÍTICA PARA RENDER
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+    console.error(colors.bgRed.white(' ERROR CRÍTICO: Faltan variables de entorno de Supabase en Render '));
+    console.log(colors.red(`SUPABASE_URL: ${supabaseUrl ? 'OK' : 'FALTA'}`));
+    console.log(colors.red(`SUPABASE_SERVICE_KEY: ${supabaseServiceKey ? 'OK' : 'FALTA'}`));
+}
 
 const dbUser = process.env.DB_USER || '';
 // Extrae 'igusfieacmzhwikasnqi' del string 'postgres.igusfieacmzhwikasnqi'
@@ -18,8 +28,8 @@ const projectID = dbUser.includes('.') ? dbUser.split('.')[1] : '';
 
 // 2. CLIENTE API (Respaldo HTTPS)
 export const supabase = createClient(
-    process.env.SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_KEY || ''
+    supabaseUrl || 'https://placeholder.supabase.co', 
+    supabaseServiceKey || 'placeholder'
 );
 
 // 3. CONFIGURACIÓN SEQUELIZE
@@ -62,16 +72,18 @@ export async function connectDB() {
 
     } catch (error: any) {
         console.log(colors.bgRed.white('\n ⚠️ AVISO DE CONEXIÓN '));
-        console.log(colors.red(`Causa probable: Firewall empresarial bloqueando puerto 6543.`));
+        console.log(colors.red(`Causa probable: Firewall empresarial o variables mal configuradas.`));
         console.log(colors.red(`Error técnico: ${error.message}`));
         
         // Intento de respaldo vía API (Puerto 443 - HTTPS)
-        const { error: apiError } = await supabase.from('usuarios').select('count', { count: 'exact', head: true });
-        
-        if (!apiError) {
-            console.log(colors.green('✅ [SUPABASE API] Respaldo HTTPS activo. El servidor funcionará.'));
-        } else {
-            console.log(colors.bgYellow.black(' ❌ [CRÍTICO] Ni la DB ni la API responden. Revisa tu internet. '));
+        if (supabaseUrl && supabaseServiceKey) {
+            const { error: apiError } = await supabase.from('usuarios').select('count', { count: 'exact', head: true });
+            
+            if (!apiError) {
+                console.log(colors.green('✅ [SUPABASE API] Respaldo HTTPS activo. El servidor funcionará.'));
+            } else {
+                console.log(colors.bgYellow.black(' ❌ [CRÍTICO] Ni la DB ni la API responden. Revisa credenciales. '));
+            }
         }
     }
 }
