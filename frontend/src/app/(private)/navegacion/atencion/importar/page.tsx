@@ -42,16 +42,19 @@ export default function ImportarDataAtencionPage() {
     }
   };
 
-  // --- 🚀 LÓGICA DE SUBIDA ---
+  // --- 🚀 LÓGICA DE SUBIDA ACTUALIZADA ---
   const handleUpload = async () => {
     if (!file) return;
 
     setUploading(true);
     const formData = new FormData();
-    formData.append("archivo", file); 
+    
+    // ✅ CAMBIO 1: El backend ahora espera el campo 'file' (Multer single)
+    formData.append("file", file); 
 
     try {
-      const res = await api.post("/patients/upload", formData, {
+      // ✅ CAMBIO 2: Ruta actualizada al nuevo módulo /navegacion
+      const res = await api.post("/navegacion/patients/import", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
@@ -60,7 +63,8 @@ export default function ImportarDataAtencionPage() {
       alert(`✅ ¡Importación Finalizada!\n\n📄 Filas procesadas: ${stats.total}\n🆕 Nuevos ingresos: ${stats.created}\n🔄 Registros actualizados: ${stats.updated}`);
       
       setFile(null);
-      router.push("/navegacion/atencion/directorio"); 
+      // ✅ CAMBIO 3: Redirección al listado operativo de atención
+      router.push("/navegacion/atencion/pacientes"); 
 
     } catch (error: any) {
       console.error("Error subiendo archivo:", error);
@@ -78,7 +82,7 @@ export default function ImportarDataAtencionPage() {
       
       {/* 1. HEADER OPERATIVO */}
       <div className="flex items-center gap-4 mb-10 border-b border-slate-100 pb-6">
-        <Link href="/navegacion/atencion/directorio" className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm group">
+        <Link href="/navegacion/atencion/pacientes" className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm group">
             <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform"/>
         </Link>
         <div>
@@ -87,10 +91,9 @@ export default function ImportarDataAtencionPage() {
         </div>
       </div>
 
-      {/* 2. ZONA DE CARGA (EMERALD STYLE) */}
+      {/* 2. ZONA DE CARGA */}
       <div className="bg-white border border-slate-100 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 overflow-hidden mb-10 transition-all">
         <div className="bg-emerald-600 p-8 text-white text-center relative overflow-hidden">
-            {/* Decoración de fondo */}
             <div className="absolute top-0 right-0 p-4 opacity-10">
                 <FileSpreadsheet size={120} />
             </div>
@@ -154,9 +157,8 @@ export default function ImportarDataAtencionPage() {
                 </label>
             </div>
 
-            {/* Acciones de Control */}
             <div className="flex flex-col sm:flex-row justify-center mt-10 gap-4">
-                <Link href="/navegacion/atencion/directorio" className={`px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all text-center ${uploading ? 'pointer-events-none opacity-50' : ''}`}>
+                <Link href="/navegacion/atencion/pacientes" className={`px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all text-center ${uploading ? 'pointer-events-none opacity-50' : ''}`}>
                     Regresar
                 </Link>
                 <button 
@@ -178,7 +180,7 @@ export default function ImportarDataAtencionPage() {
         </div>
       </div>
 
-      {/* 3. GUÍA DE ESTRUCTURA (EMERALD ACCENTS) */}
+      {/* 3. GUÍA DE ESTRUCTURA */}
       <div className="bg-slate-900 rounded-[2rem] p-8 border border-slate-800 shadow-2xl shadow-slate-900/20">
         <div className="flex items-center gap-3 mb-8">
             <div className="w-8 h-8 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center">
@@ -198,20 +200,11 @@ export default function ImportarDataAtencionPage() {
             <ColumnItem label="Ciudad de Residencia" />
             <ColumnItem label="Género" />
         </div>
-
-        <div className="mt-10 p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex gap-4 items-start animate-pulse">
-            <div className="mt-1 text-emerald-500"><CheckCircle2 size={18}/></div>
-            <div className="text-xs font-medium text-emerald-100/70 leading-relaxed">
-                <strong className="text-emerald-400 uppercase tracking-widest">Validación de Integridad:</strong> Si un paciente ya existe bajo el mismo número de documento, el sistema actualizará automáticamente su información demográfica sin perder el histórico de citas.
-            </div>
-        </div>
       </div>
-
     </div>
   );
 }
 
-// --- COMPONENTE AUXILIAR ---
 function ColumnItem({ label, required }: { label: string, required?: boolean }) {
     return (
         <div className="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0 group">
@@ -223,11 +216,6 @@ function ColumnItem({ label, required }: { label: string, required?: boolean }) 
             <span className={`text-xs uppercase tracking-tight ${required ? "font-black text-slate-200" : "font-bold text-slate-500"}`}>
                 {label}
             </span>
-            {required && (
-                <span className="text-[8px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full ml-auto uppercase tracking-tighter border border-emerald-500/20">
-                    Crítico
-                </span>
-            )}
         </div>
     );
 }

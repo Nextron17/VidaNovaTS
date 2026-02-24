@@ -69,7 +69,7 @@ export default function PacientesAtencionPage() {
     abortControllerRef.current = controller;
 
     try {
-      const res = await api.get(`/patients`, {
+      const res = await api.get(`/navegacion/patients`, {
         params: { page, limit: 12, search: searchTerm },
         signal: controller.signal
       });

@@ -93,7 +93,7 @@ export default function AgendaAtencionPage() {
   const fetchEvents = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
     try {
-        const res = await api.get('/patients', {
+        const res = await api.get('/navegacion/calendar', {
             params: {
                 page: 1, limit: 1000, 
                 startDate: start.toISOString(), 

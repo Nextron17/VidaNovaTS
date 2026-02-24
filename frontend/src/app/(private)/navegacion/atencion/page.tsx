@@ -123,7 +123,7 @@ export default function AtencionDashboardPage() {
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
 
-        const res = await api.get('/patients', { params });
+        const res = await api.get('/navegacion/patients', { params });
         if (res.data.success) {
             const mappedData = (res.data.data || []).map((p: any) => {
                 const f = p.followups?.[0] || {}; 

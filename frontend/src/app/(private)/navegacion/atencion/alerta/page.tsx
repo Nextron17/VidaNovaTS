@@ -17,7 +17,7 @@ export default function AlertasPage() {
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/alerts');
+      const res = await api.get('/navegacion/alerts');
       if (res.data.success) {
           setInconsistencies(res.data.inconsistencies);
           setOverdue(res.data.overdue);

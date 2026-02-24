@@ -48,7 +48,7 @@ export default function CrearPacienteAtencionPage() {
     }
 
     try {
-      const res = await api.post("/patients", formData);
+      const res = await api.post("/navegacion/patients", formData);
       
       if (res.data.success || res.status === 201 || res.status === 200) {
         // Redirigir al directorio de atención con un flag de éxito

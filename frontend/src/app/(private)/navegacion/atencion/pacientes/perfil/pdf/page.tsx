@@ -39,7 +39,7 @@ export default function PdfPreviewPage() {
     const fetchData = async () => {
       if (!id) return;
       try {
-        const res = await api.get(`/patients/${id}`);
+        const res = await api.get(`/navegacion/patients/pdf/${id}`);
         
         if (res.data.success) {
             setData(res.data.data);

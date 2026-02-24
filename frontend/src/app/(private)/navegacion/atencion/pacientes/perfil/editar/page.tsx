@@ -39,7 +39,7 @@ function EditarPacienteAtencionContent() {
     const fetchPaciente = async () => {
       if (!id) return;
       try {
-        const response = await api.get(`/patients/${id}`);
+        const response = await api.get(`/navegacion/patients/${id}`);
         
         if (response.data.success) {
             const data = response.data.data;
@@ -89,7 +89,7 @@ function EditarPacienteAtencionContent() {
     setIsLoading(true);
 
     try {
-      await api.put(`/patients/${id}`, formData);
+      await api.put(`/navegacion/patients/${id}`, formData);
       alert("✅ Datos del paciente actualizados.");
       router.push(`/navegacion/atencion/pacientes/perfil?id=${id}`);
       router.refresh(); 
