@@ -59,7 +59,7 @@ function GestionEdicionDetalle() {
       if (!id) return;
       setIsFetching(true);
       try {
-        const res = await api.get(`/followups/${id}`);
+        const res = await api.get(`/navegacion/followups/${id}`);
         const data = res.data.data || res.data;
 
         if (data) {
