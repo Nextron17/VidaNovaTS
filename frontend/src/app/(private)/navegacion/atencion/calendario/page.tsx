@@ -64,7 +64,7 @@ const EVENT_STYLES: { [key: string]: { bg: string, border: string, text: string,
     'QUIMIOTERAPIA': { bg: 'bg-teal-50',      border: 'border-teal-600',    text: 'text-teal-800',    icon: Activity,    label: 'Quimioterapia', hex: '#0d9488' }, 
     'RADIOTERAPIA':  { bg: 'bg-cyan-50',      border: 'border-cyan-600',    text: 'text-cyan-800',    icon: Zap,         label: 'Radioterapia',  hex: '#0891b2' },   
     'CIRUGIA':       { bg: 'bg-rose-50',      border: 'border-rose-600',    text: 'text-rose-800',    icon: Activity,    label: 'Cirugía',       hex: '#e11d48' },          
-    'IMAGEN':        { bg: 'bg-indigo-50',    border: 'border-indigo-600',  text: 'text-indigo-800',  icon: FileText,    label: 'Imágenes',      hex: '#4f46e5' },           
+    'IMAGEN':        { bg: 'bg-indigo-50',    border: 'border-indigo-600',  text: 'text-indigo-800',  icon: FileText,    label: 'Imágenes',      hex: '#4f46e5' },          
     'LABORATORIO':   { bg: 'bg-blue-50',      border: 'border-blue-600',    text: 'text-blue-800',    icon: FileText,    label: 'Laboratorio',   hex: '#2563eb' },   
     'OTROS':         { bg: 'bg-slate-50',     border: 'border-slate-600',   text: 'text-slate-800',   icon: CalendarIcon,label: 'Otros',         hex: '#475569' }                
 };
@@ -93,6 +93,7 @@ export default function AgendaAtencionPage() {
   const fetchEvents = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
     try {
+        // La API está correcta según la estructura modular
         const res = await api.get('/navegacion/calendar', {
             params: {
                 page: 1, limit: 1000, 
@@ -264,8 +265,9 @@ export default function AgendaAtencionPage() {
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/50 shrink-0">
+            {/* ✅ CORRECCIÓN 1: Redirección al listado correcto */}
             <button 
-                onClick={() => router.push('/navegacion/atencion/directorio')}
+                onClick={() => router.push('/navegacion/atencion/pacientes')}
                 className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
                 <Plus size={18}/> Agendar Paciente
@@ -417,8 +419,9 @@ export default function AgendaAtencionPage() {
                   </div>
 
                   <div className="p-8 border-t border-slate-100 bg-slate-50/50 shrink-0">
+                      {/* ✅ CORRECCIÓN 2: Redirección correcta al perfil del paciente */}
                       <button 
-                          onClick={() => router.push(`/navegacion/atencion/casos/${selectedEvent.extendedProps.patientId}`)}
+                          onClick={() => router.push(`/navegacion/atencion/pacientes/perfil?id=${selectedEvent.extendedProps.patientId}`)}
                           className="w-full py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl shadow-slate-900/20 hover:bg-emerald-600 transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
                       >
                           <span>Ir al Expediente Clínico</span>
