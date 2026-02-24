@@ -5,11 +5,11 @@ import {
   Search, Filter, AlertCircle, 
   CheckCircle2, X, RefreshCw, Layers, 
   FlaskConical, Stethoscope, Scissors, Activity, FileQuestion, 
-  Loader2, Syringe, Bed, HeartPulse, FileText, ChevronRight, HelpCircle
+  Loader2, Syringe, Bed, HeartPulse, FileText, ChevronRight, HelpCircle 
 } from "lucide-react";
 import api from "@/src/app/services/api"; 
 
-// --- 1. LAS 10 CATEGORÍAS OFICIALES (VISUALES) ---
+// --- 1. CATEGORÍAS VISUALES ---
 const CATEGORIAS_VISUALES = [
   "Consulta Externa", 
   "Quimioterapia", 
@@ -20,7 +20,7 @@ const CATEGORIAS_VISUALES = [
   "Clínica del Dolor", 
   "Estancia", 
   "Oncología",
-  "Otros" // 🔥 NUEVA
+  "Otros"
 ];
 
 // --- 2. MAPEO: DB -> VISUAL ---
@@ -29,7 +29,9 @@ const mapCategoryToModality = (dbCategory: string): string => {
     const c = String(dbCategory).trim();
     const cUpper = c.toUpperCase();
 
-    if (CATEGORIAS_VISUALES.includes(c)) return c;
+    if (CATEGORIAS_VISUALES.map(v => v.toUpperCase()).includes(cUpper)) {
+        return CATEGORIAS_VISUALES.find(v => v.toUpperCase() === cUpper) || c;
+    }
 
     if (cUpper.includes('QUIMIO')) return 'Quimioterapia';
     if (cUpper.includes('RADIO')) return 'Radioterapia';
@@ -39,8 +41,6 @@ const mapCategoryToModality = (dbCategory: string): string => {
     if (cUpper.includes('CONSULTA') || cUpper.includes('VALORACION')) return 'Consulta Externa';
     if (cUpper.includes('ESTANCIA') || cUpper.includes('HOSPITAL')) return 'Estancia';
     if (cUpper.includes('DOLOR') || cUpper.includes('PALIATIVO')) return 'Clínica del Dolor';
-    
-    // Mapeo para Otros
     if (cUpper.includes('TRANSPORTE') || cUpper.includes('COPIA') || cUpper.includes('OTROS')) return 'Otros';
 
     if (cUpper.includes('CAC') || cUpper.includes('TUMOR') || cUpper.includes('LEUCEMIA') || cUpper.includes('LINFOMA') || cUpper.includes('CANCER')) {
@@ -53,7 +53,6 @@ const mapCategoryToModality = (dbCategory: string): string => {
 // --- 3. ESTILOS VISUALES ---
 const getBadgeStyles = (grupoVisual: string) => {
     const g = String(grupoVisual || "").toUpperCase(); 
-    
     if (g === 'QUIMIOTERAPIA') return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', icon: Syringe };
     if (g === 'RADIOTERAPIA') return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: Activity };
     if (g === 'IMAGENOLOGÍA') return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: Layers };
@@ -63,10 +62,7 @@ const getBadgeStyles = (grupoVisual: string) => {
     if (g === 'ESTANCIA') return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: Bed };
     if (g === 'CLÍNICA DEL DOLOR') return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', icon: HeartPulse };
     if (g === 'ONCOLOGÍA') return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', icon: FileText };
-    
-    // Estilo para OTROS (Gris)
     if (g === 'OTROS') return { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', icon: HelpCircle };
-    
     return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: AlertCircle };
 };
 
@@ -81,10 +77,11 @@ export default function ConfigCupsPage() {
 
   useEffect(() => { setIsClient(true); fetchCups(); }, []);
 
+  // ✅ CORRECCIÓN: Ruta modularizada /api/navegacion/cups
   const fetchCups = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/navegacion/patients/cups"); 
+      const res = await api.get("/navegacion/cups"); 
       if (res.data.success) {
         const mappedData = (res.data.data || []).map((item: any) => ({
             ...item,
@@ -99,10 +96,11 @@ export default function ConfigCupsPage() {
     }
   };
 
+  // ✅ CORRECCIÓN: Ruta modularizada /api/navegacion/cups/sync
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await api.post("/navegacion/patients/cups/sync", {}, { timeout: 120000 }); 
+      const res = await api.post("/navegacion/cups/sync", {}, { timeout: 120000 }); 
       if (res.data.success) {
         alert(`Sincronización completa.`);
         fetchCups();
@@ -114,6 +112,7 @@ export default function ConfigCupsPage() {
     }
   };
 
+  // ✅ CORRECCIÓN: Ruta modularizada /api/navegacion/cups/bulk-update
   const handleBulkUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
@@ -123,7 +122,7 @@ export default function ConfigCupsPage() {
 
     try {
       setLoading(true);
-      const res = await api.put("/navegacion/patients/cups/bulk-update", {
+      const res = await api.post("/navegacion/cups/bulk-update", {
         ids: selectedItems,
         grupo: newGroup
       });
@@ -179,7 +178,7 @@ export default function ConfigCupsPage() {
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight">Maestro de Procedimientos</h1>
             </div>
             <p className="text-slate-500 font-medium ml-1">
-                Clasificación de CUPS ({data.length} códigos en total).
+                Clasificación inteligente de CUPS para el módulo de navegación.
             </p>
         </div>
         
@@ -202,7 +201,7 @@ export default function ConfigCupsPage() {
               className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 disabled:opacity-50"
             >
                 {syncing ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>}
-                <span className="hidden sm:inline">Sincronizar Nuevos</span>
+                <span className="hidden sm:inline">Sincronizar Catálogo</span>
             </button>
         </div>
       </div>
@@ -252,9 +251,9 @@ export default function ConfigCupsPage() {
                         <th className="p-5 w-16 text-center">
                             <input type="checkbox" className="w-5 h-5 rounded-md border-2 border-slate-300 text-blue-600 cursor-pointer" onChange={handleSelectAll} checked={filteredData.length > 0 && selectedItems.length === filteredData.length} />
                         </th>
-                        <th className="py-5 px-4 w-40">Código</th>
-                        <th className="py-5 px-4">Descripción del Servicio</th>
-                        <th className="py-5 px-4 w-64">Categoría Asignada</th>
+                        <th className="py-5 px-4 w-40">Código CUPS</th>
+                        <th className="py-5 px-4">Descripción del Procedimiento</th>
+                        <th className="py-5 px-4 w-64">Clasificación</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -277,7 +276,7 @@ export default function ConfigCupsPage() {
                                     <p className="text-sm font-semibold text-slate-700 line-clamp-2">{item.descripcion}</p>
                                 </td>
                                 <td className="py-5 px-4">
-                                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border ${styles.bg} ${styles.text} ${styles.border} shadow-sm`} title={`Valor DB: ${item.grupo || 'Vacío'}`}>
+                                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border ${styles.bg} ${styles.text} ${styles.border} shadow-sm`}>
                                         <BadgeIcon size={12} strokeWidth={3} /> {item.modalidadVisual}
                                     </span>
                                 </td>
@@ -289,9 +288,7 @@ export default function ConfigCupsPage() {
                             <td colSpan={4} className="p-20 text-center">
                                 <div className="flex flex-col items-center gap-4 text-slate-400">
                                     <FileQuestion size={48} className="opacity-50"/>
-                                    <div>
-                                        <p className="text-lg font-bold text-slate-600">No se encontraron procedimientos</p>
-                                    </div>
+                                    <p className="text-lg font-bold text-slate-600">No se encontraron resultados</p>
                                 </div>
                             </td>
                         </tr>
@@ -301,21 +298,21 @@ export default function ConfigCupsPage() {
         </div>
       </div>
 
-      {/* BARRA FLOTANTE */}
+      {/* BARRA FLOTANTE DE ACCIÓN MASIVA */}
       <div className={`fixed bottom-10 left-0 right-0 flex justify-center z-50 pointer-events-none transition-all duration-500 ${selectedItems.length > 0 ? 'translate-y-0 opacity-100' : 'translate-y-24 opacity-0'}`}>
         <form onSubmit={handleBulkUpdate} className="bg-slate-900/90 backdrop-blur-md text-white rounded-3xl shadow-2xl py-3 pl-6 pr-3 flex items-center gap-6 pointer-events-auto border border-white/10">
             <div className="flex items-center gap-3">
                 <div className="bg-blue-500 text-white w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black">{selectedItems.length}</div>
-                <div className="flex flex-col"><span className="text-xs font-bold text-slate-400">Items</span><span className="text-sm font-bold">Seleccionados</span></div>
+                <div className="flex flex-col"><span className="text-xs font-bold text-slate-400">Códigos</span><span className="text-sm font-bold">Seleccionados</span></div>
             </div>
             <div className="h-8 w-px bg-white/10"></div>
             <div className="flex items-center gap-3">
                 <select name="bulk_group" defaultValue="" className="bg-white/10 text-white text-sm font-bold py-2 pl-4 pr-10 rounded-xl border border-white/10 outline-none cursor-pointer appearance-none" required>
-                    <option value="" disabled className="text-slate-900">Categoría...</option>
+                    <option value="" disabled className="text-slate-900">Asignar Categoría...</option>
                     {CATEGORIAS_VISUALES.map(c => <option key={c} value={c} className="text-slate-900">{c}</option>)}
                 </select>
             </div>
-            <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-lg"><CheckCircle2 size={18}/> Actualizar</button>
+            <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-lg"><CheckCircle2 size={18}/> Actualizar Todos</button>
             <button type="button" onClick={() => setSelectedItems([])} className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-white"><X size={20}/></button>
         </form>
       </div>
