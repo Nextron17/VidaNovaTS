@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
+import helmet from 'helmet'; // 🛡️ NUEVO: Seguridad de cabeceras HTTP
+import rateLimit from 'express-rate-limit'; // 🛡️ NUEVO: Límite de peticiones
 import { createServer } from 'http';
 
 // IMPORTACIÓN DE RUTAS
@@ -10,21 +12,36 @@ import navegacionRoutes from './modules/navegacion/routes/navegacionRoutes';
 
 const app = express();
 
-// 1. LÍMITES DE CARGA (Para fotos y documentos pesados de auditoría)
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// 🛡️ 1. SEGURIDAD BÁSICA (Debe ir primero)
+// Helmet bloquea cabeceras que revelan información y previene ataques XSS/Clickjacking
+app.use(helmet());
+app.disable('x-powered-by'); // Oculta que usamos Express
 
-// 2. CONFIGURACIÓN DE CORS DINÁMICO
-// Permite localhost para desarrollo y la URL de Render para producción
+// Configuración del limitador de peticiones (Anti-DDoS y fuerza bruta básica)
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 300, // Límite de 300 peticiones por IP en ese tiempo
+    message: {
+        success: false,
+        error: 'Hemos detectado tráfico inusual desde tu red. Intenta de nuevo en 15 minutos.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Aplicamos el límite SOLO a las rutas de la API (no afecta a recursos estáticos si los tuvieras)
+app.use('/api', globalLimiter);
+
+
+// ⚙️ 2. CONFIGURACIÓN DE CORS DINÁMICO
 const allowedOrigins = [
     process.env.FRONTEND_URL, 
     'http://localhost:3000',
-    'http://localhost:5173' // Por si usas Vite
+    'http://localhost:5173'
 ];
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Permitir peticiones sin origen (como Postman) o si están en la lista blanca
         if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
             callback(null, true);
         } else {
@@ -32,27 +49,39 @@ app.use(cors({
         }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'] // 🛡️ Restringimos cabeceras permitidas
 }));
 
+
+// 📦 3. PARSERS Y LOGS
 app.use(morgan('dev'));
 
-// 3. RUTAS DE LA API
+// LÍMITES DE CARGA
+// Nota: Para subida de Excel (multipart/form-data) se encarga Multer. 
+// Estos límites son para JSON puro y datos de formularios codificados.
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+
+// 🚀 4. RUTAS DE LA API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/navegacion', navegacionRoutes); 
 
-// Ruta de salud del sistema
+// Ruta de salud del sistema (Health Check para Docker/Render)
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        server: 'VidaNova Backend - Docker Mode', 
+        server: 'VidaNova Backend - Security Mode', 
         database: 'Connected',
         timestamp: new Date().toISOString() 
     });
 });
 
-// 4. MANEJO DE RUTAS NO ENCONTRADAS (404)
+
+// 🚨 5. MANEJO DE ERRORES (404 y Globales)
+// 404 - Ruta no encontrada
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -60,16 +89,17 @@ app.use((req, res) => {
     });
 });
 
-// 5. MANEJADOR GLOBAL DE ERRORES (Sequelize, JWT, etc.)
+// 500 - Manejador Global de Errores
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || 500;
     const message = err.message || 'Error interno del servidor';
     
-    if (err.name === 'SequelizeDatabaseError') {
+    // Interceptar errores de Sequelize (Base de datos) para no filtrar info delicada
+    if (err.name === 'SequelizeDatabaseError' || err.name === 'SequelizeValidationError') {
         return res.status(400).json({
             success: false,
-            error: 'Error de estructura en la Base de Datos',
-            detail: err.message
+            error: 'Error de validación o estructura en la Base de Datos',
+            detail: process.env.NODE_ENV === 'development' ? err.message : 'Error interno' // Ocultamos detalles en producción
         });
     }
 

@@ -64,6 +64,14 @@ export class User extends Model {
     })
     avatarColor!: string;
 
+    // 🛡️ NUEVO CAMPO: SEGURIDAD DE ACCESO (Activo / Inactivo)
+    @Column({
+        type: DataType.BOOLEAN,
+        allowNull: false,
+        defaultValue: true // Todo usuario nuevo nace activo por defecto
+    })
+    isActive!: boolean;
+
     // SEGURIDAD Y RECUPERACIÓN
     @Column({ type: DataType.STRING, allowNull: true })
     resetPasswordToken!: string | null;

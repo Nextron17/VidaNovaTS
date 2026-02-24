@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { UserProvider } from "@/src/app/context/UserContext";
 import Sidebar from './components/Sidebar'; 
 import Header from './components/Header';
+// 🛡️ 1. IMPORTAMOS EL GUARDIÁN
+import RoleGuard from "@/src/app/components/RoleGuard"; // Ajusta la ruta si guardaste el RoleGuard en otra carpeta
 
-export default function NavegacionLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -26,8 +27,10 @@ export default function NavegacionLayout({ children }: { children: React.ReactNo
   if (!mounted) return null;
 
   return (
-    <UserProvider>
-      <div className="flex min-h-screen bg-white">
+    // 🛡️ 2. QUITAMOS EL UserProvider Y ENVOLVEMOS TODO CON EL GUARDIÁN DE ROLES
+    // Así, si un navegador intenta entrar, ni siquiera verá el Sidebar de Admin.
+    <RoleGuard allowedRoles={['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR', 'AUDITOR']}>
+      <div className="flex min-h-screen bg-slate-50">
         
         {/* SIDEBAR FIJO */}
         <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
@@ -54,6 +57,6 @@ export default function NavegacionLayout({ children }: { children: React.ReactNo
 
         </div>
       </div>
-    </UserProvider>
+    </RoleGuard>
   );
 }

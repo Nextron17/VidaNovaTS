@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { UserProvider } from "@/src/app/context/UserContext";
 import Sidebar from './components/Sidebar'; 
 import Header from './components/Header';
+// 🛡️ 1. IMPORTAMOS EL GUARDIÁN DE RUTAS
+import RoleGuard from "@/src/app/components/RoleGuard";
 
 export default function AtencionLayout({ children }: { children: React.ReactNode }) {
   // Estado inicial true para escritorio
@@ -29,10 +30,12 @@ export default function AtencionLayout({ children }: { children: React.ReactNode
   };
 
   // Evita el flash de contenido no coincidente (Hydration Mismatch)
-  if (!mounted) return <div className="min-h-screen bg-slate-50" />;
+  if (!mounted) return <div className="min-h-screen bg-[#F8FAFC]" />;
 
   return (
-    <UserProvider>
+    // 🛡️ 2. QUITAMOS EL UserProvider Y ENVOLVEMOS CON EL GUARDIÁN
+    // Permitimos acceso a Navegadores y a sus superiores.
+    <RoleGuard allowedRoles={['NAVIGATOR', 'SUPER_ADMIN', 'COORDINATOR_NAVIGATOR']}>
       <div className="flex min-h-screen bg-[#F8FAFC]">
         
         {/* SIDEBAR (Fijo a la izquierda) */}
@@ -60,6 +63,6 @@ export default function AtencionLayout({ children }: { children: React.ReactNode
 
         </div>
       </div>
-    </UserProvider>
+    </RoleGuard>
   );
 }

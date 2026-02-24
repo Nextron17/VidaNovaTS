@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import xss from 'xss'; // 🛡️ 1. IMPORTACIÓN DEL ESCUDO ANTI-XSS
 import { Patient } from '../models/Patient';
 import { FollowUp } from '../models/FollowUp';
 import { sequelize } from '../../../core/config/db';
@@ -6,9 +7,7 @@ import { CupsController } from '../controllers/CupsController';
 
 export class ImportService {
 
-    
     // 1. HELPERS DE LIMPIEZA Y NORMALIZACIÓN 
-    
 
     private static parseDocType(raw: any): string {
         const t = String(raw || '').toUpperCase().trim();
@@ -44,9 +43,15 @@ export class ImportService {
         return false;
     }
 
+    // 🛡️ 2. EL CUELLO DE BOTELLA SANITIZADO
     private static cleanText(val: any): string {
         if (!val) return '';
         let str = String(val).trim();
+        
+        // 🚨 MAGIA AQUÍ: xss() intercepta el texto y destruye cualquier etiqueta 
+        // <script>, <iframe>, o evento de javascript onmouseover="..." antes de que pase al sistema.
+        str = xss(str); 
+
         if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
         str = str.replace(/(\r\n|\n|\r)/gm, " "); 
         str = str.replace(/\s\s+/g, ' '); 
@@ -66,7 +71,7 @@ export class ImportService {
         const parts = str.split('|');
         const validNumbers: string[] = [];
         for (let part of parts) {
-            let num = part.replace(/[^0-9]/g, '');
+            let num = part.replace(/[^0-9]/g, ''); // 🛡️ Naturalmente seguro contra XSS porque elimina letras
             if (num.startsWith('57') && num.length >= 12) num = num.substring(2); 
             if (part.includes('E+')) num = ''; 
             if (num.length >= 7 && !validNumbers.includes(num)) validNumbers.push(num);
@@ -106,7 +111,6 @@ export class ImportService {
                     else if (parts[2].length === 4) date = new Date(p2, p1 - 1, p0);
                 }
             }
-            // Validar fechas futuras irreales 
             if (date && !isNaN(date.getTime())) {
                 if (date.getFullYear() < 1900 || date.getFullYear() > 2100) return null;
                 return date;
@@ -283,7 +287,7 @@ export class ImportService {
                     'cups': ['cups', 'codigo', 'codigo_procedimiento', 'cod_cups'],
                     'servicio': ['servicio', 'descripcion', 'procedimiento', 'nombre_del_procedimiento', 'servicios_solicitados', 'examen'],
                     'cie10': ['codigo_diagnostico', 'cie10', 'dx', 'diagnostico_principal', 'codigo_dx'], 
-                    'desc_dx': ['diagnostico', 'descripcion_diagnostico', 'nombre_dx'], // Nuevo para respaldo por texto
+                    'desc_dx': ['diagnostico', 'descripcion_diagnostico', 'nombre_dx'], 
                     
                     'estado_general': [
                         'estado_de_la_solicitud', 'estado_solicitud', 'estado_cita', 'estado_de_la_cita', 
@@ -315,10 +319,10 @@ export class ImportService {
 
                         const rawDoc = getVal('doc');
                         if (!rawDoc) { await t.commit(); continue; } 
-                        const docClean = String(rawDoc).replace(/[^a-zA-Z0-9]/g, '');
+                        const docClean = String(rawDoc).replace(/[^a-zA-Z0-9]/g, ''); // 🛡️ Sanitizado naturalmente por regex
                         if (ImportService.isGarbageID(docClean)) { await t.commit(); continue; } 
 
-                        // 1. Datos Paciente
+                        // 1. Datos Paciente (TODOS ESTOS PASAN POR xss() GRACIAS A cleanText)
                         const fullNom1 = ImportService.cleanText(getVal('nom1'));
                         const fullNom2 = ImportService.cleanText(getVal('nom2'));
                         const fullApe1 = ImportService.cleanText(getVal('ape1'));
@@ -402,7 +406,7 @@ export class ImportService {
                         if (dAppoint && dAppoint < new Date() && status === 'AGENDADO') { status = 'REALIZADO'; }
                         if (status === 'REALIZADO' && !dAppoint) { dAppoint = dRequest; }
 
-                        // 4. Metadata Completa
+                        // 4. Metadata Completa (TODO ESTÁ PASANDO POR xss() GRACIAS A cleanText)
                         const obsBase = ImportService.cleanText(getVal('obs'));
                         const barrera = ImportService.cleanText(getVal('barrera'));
                         const resp = ImportService.cleanText(getVal('responsable'));
@@ -441,7 +445,7 @@ export class ImportService {
                         // Categoría Híbrida: Intenta CIE-10, si no, intenta TEXTO
                         let category = ImportService.getCohortFromCie10(cie10Code); 
                         if (!category) {
-                            category = ImportService.getCohortFromText(descDx); // Intento por nombre del diagnóstico
+                            category = ImportService.getCohortFromText(descDx); 
                         }
                         if (!category) {
                             if (service.includes('CONSULTA')) category = 'CONSULTA';

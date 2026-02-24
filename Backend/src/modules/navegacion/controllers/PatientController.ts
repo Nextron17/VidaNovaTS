@@ -8,20 +8,34 @@ import { CupsController } from './CupsController';
 
 export class PatientController {
 
-    // 1. IMPORTACIÓN MASIVA (EXCEL/CSV)
+    // 1. IMPORTACIÓN MASIVA (EXCEL/CSV) CON BLINDAJE
     static importPatients = async (req: Request, res: Response) => {
         try {
-            if (!req.file) return res.status(400).json({ error: 'Falta archivo para procesar.' });
+            // 🛡️ 1. Validación de existencia del archivo (Por si Multer lo bloqueó por peso/formato)
+            if (!req.file) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Falta archivo para procesar o el formato/peso no es válido.' 
+                });
+            }
             
+            // 2. Procesamiento del Excel
             const result = await ImportService.processPatientExcel(req.file.buffer);
             
+            // 3. Respuesta exitosa
             res.json({ 
                 success: true,
                 message: 'Proceso de importación finalizado', 
                 details: result 
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error("❌ Error Importando:", error);
+
+            // 🛡️ 4. Manejo de Errores Específicos
+            if (error.message && error.message.includes('FORMATO_INVALIDO')) {
+                return res.status(400).json({ success: false, error: error.message });
+            }
+
             res.status(500).json({ success: false, error: 'Error interno al procesar el archivo.' });
         }
     }
