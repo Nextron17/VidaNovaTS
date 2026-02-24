@@ -9,23 +9,9 @@ import interactionPlugin from '@fullcalendar/interaction';
 import esLocale from '@fullcalendar/core/locales/es';
 import { useRouter } from "next/navigation";
 import { 
-  Calendar as CalendarIcon, 
-  Plus, 
-  X,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  Stethoscope,
-  Activity,
-  FileText,
-  ChevronRight,
-  Search,
-  MapPin,
-  Phone,
-  Mail,
-  Filter,
-  Zap,
-  Target
+  Calendar as CalendarIcon, Plus, X, CheckCircle2, Clock, Loader2,
+  Stethoscope, Activity, FileText, ChevronRight, Search, MapPin,
+  Phone, Mail, Filter, Zap, Target
 } from "lucide-react";
 import api from "@/src/app/services/api";
 
@@ -58,7 +44,7 @@ interface CalendarEvent {
     };
 }
 
-// --- CONFIGURACIÓN DE ESTILOS (Sintonía Esmeralda) ---
+// --- CONFIGURACIÓN DE ESTILOS (Sintonía Esmeralda para Atención) ---
 const EVENT_STYLES: { [key: string]: { bg: string, border: string, text: string, icon: any, label: string, hex: string } } = {
     'CONSULTA':      { bg: 'bg-emerald-50',   border: 'border-emerald-600', text: 'text-emerald-800', icon: Stethoscope, label: 'Consulta',      hex: '#10b981' }, 
     'QUIMIOTERAPIA': { bg: 'bg-teal-50',      border: 'border-teal-600',    text: 'text-teal-800',    icon: Activity,    label: 'Quimioterapia', hex: '#0d9488' }, 
@@ -86,17 +72,17 @@ export default function AgendaAtencionPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => { setIsClient(true); }, []);
 
+  // --- LÓGICA DE CARGA DIRECTA Y SEGURA ---
   const fetchEvents = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
     try {
-        // La API está correcta según la estructura modular
-        const res = await api.get('/navegacion/calendar', {
+        const res = await api.get('/navegacion/patients', {
             params: {
-                page: 1, limit: 1000, 
+                page: 1, 
+                limit: 1500, // Forzamos límite alto para traer el mes completo
                 startDate: start.toISOString(), 
                 endDate: end.toISOString()
             }
@@ -104,21 +90,25 @@ export default function AgendaAtencionPage() {
 
         if (res.data.success) {
             const mappedEvents: CalendarEvent[] = [];
+            
             (res.data.data || []).forEach((p: any) => {
                 if (p.followups?.length > 0) {
                     p.followups.forEach((f: any) => {
+                        // Clasificación segura
                         let typeKey = (f.category || 'OTROS').toUpperCase().trim();
                         if (typeKey.includes('IMAGEN')) typeKey = 'IMAGEN';
-                        if (typeKey.includes('QUIMIO')) typeKey = 'QUIMIOTERAPIA';
-                        if (typeKey.includes('RADIO')) typeKey = 'RADIOTERAPIA';
-                        if (typeKey.includes('CIRUGIA')) typeKey = 'CIRUGIA';
-                        if (typeKey.includes('LAB')) typeKey = 'LABORATORIO';
+                        else if (typeKey.includes('QUIMIO')) typeKey = 'QUIMIOTERAPIA';
+                        else if (typeKey.includes('RADIO')) typeKey = 'RADIOTERAPIA';
+                        else if (typeKey.includes('CIRUGIA')) typeKey = 'CIRUGIA';
+                        else if (typeKey.includes('LAB')) typeKey = 'LABORATORIO';
+                        
                         if (!EVENT_STYLES[typeKey]) typeKey = 'OTROS';
 
                         const style = EVENT_STYLES[typeKey];
                         const eventDate = f.dateAppointment ? f.dateAppointment : f.dateRequest;
                         if (!eventDate) return;
 
+                        // Manejo de horas
                         const dateObj = new Date(eventDate);
                         const isAllDay = dateObj.getHours() === 0 && dateObj.getMinutes() === 0;
                         const endDateObj = new Date(dateObj);
@@ -161,16 +151,16 @@ export default function AgendaAtencionPage() {
   }, []);
 
   const handleDatesSet = (dateInfo: any) => {
-      setCurrentDate(dateInfo.start); 
       fetchEvents(dateInfo.start, dateInfo.end);
   };
 
+  // --- FILTRO LOCAL RÁPIDO ---
   const filteredEvents = useMemo(() => {
       return events.filter(evt => {
           const matchType = selectedTypes.includes(evt.extendedProps.type);
           const matchSearch = searchTerm === "" || 
                               evt.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              evt.extendedProps.serviceName?.toLowerCase().includes(searchTerm.toLowerCase());
+                              (evt.extendedProps.serviceName || '').toLowerCase().includes(searchTerm.toLowerCase());
           return matchType && matchSearch;
       });
   }, [events, selectedTypes, searchTerm]);
@@ -196,6 +186,15 @@ export default function AgendaAtencionPage() {
 
   if (!isClient) return null;
 
+  // Renderizado seguro del Modal
+  const currentStatusStyle = selectedEvent 
+    ? (STATUS_STYLES[selectedEvent.extendedProps.status as EventStatus] || STATUS_STYLES['PENDIENTE']) 
+    : STATUS_STYLES['PENDIENTE'];
+
+  const currentEventType = selectedEvent 
+    ? (EVENT_STYLES[selectedEvent.extendedProps.type] || EVENT_STYLES['OTROS'])
+    : EVENT_STYLES['OTROS'];
+
   return (
     <div className="flex w-full h-screen bg-[#f8fafc] font-sans text-slate-800 overflow-hidden">
       
@@ -212,19 +211,19 @@ export default function AgendaAtencionPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-            {/* Buscador de Navegación */}
+            {/* Buscador */}
             <div className="relative group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
                 <input 
                     type="text" 
-                    placeholder="Buscar en agenda..." 
+                    placeholder="Buscar paciente o examen..." 
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:bg-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
 
-            {/* Métricas de Navegador */}
+            {/* Métricas */}
             <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-2xl">
                 <h3 className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Target size={12}/> Rendimiento de Hoy
@@ -265,12 +264,11 @@ export default function AgendaAtencionPage() {
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/50 shrink-0">
-            {/* ✅ CORRECCIÓN 1: Redirección al listado correcto */}
             <button 
                 onClick={() => router.push('/navegacion/atencion/pacientes')}
                 className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
-                <Plus size={18}/> Agendar Paciente
+                <Plus size={18}/> Ir al Directorio
             </button>
         </div>
       </aside>
@@ -343,11 +341,11 @@ export default function AgendaAtencionPage() {
           <div className="fixed inset-0 z-50 flex justify-end">
               <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-in fade-in" onClick={() => setIsDetailOpen(false)}></div>
 
-              <div className="relative w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-500 flex flex-col border-l border-emerald-100">
-                  <div className={`p-8 border-b border-slate-100 shrink-0 ${EVENT_STYLES[selectedEvent.extendedProps.type].bg}`}>
+              <div className="relative w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col border-l border-emerald-100">
+                  <div className={`p-8 border-b border-slate-100 shrink-0 ${currentEventType.bg}`}>
                       <div className="flex justify-between items-start mb-6">
-                        <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-white border ${EVENT_STYLES[selectedEvent.extendedProps.type].border.replace('border-', 'text-')} shadow-sm`}>
-                            {React.createElement(EVENT_STYLES[selectedEvent.extendedProps.type].icon, { size: 14 })}
+                        <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-white border ${currentEventType.border.replace('border-', 'text-')} shadow-sm`}>
+                            {React.createElement(currentEventType.icon, { size: 14 })}
                             {selectedEvent.extendedProps.type}
                         </span>
                         <button onClick={() => setIsDetailOpen(false)} className="p-2 bg-white/80 hover:bg-white rounded-full transition-all text-slate-400 hover:text-rose-500 shadow-sm"><X size={20}/></button>
@@ -369,11 +367,11 @@ export default function AgendaAtencionPage() {
                                   {new Date(selectedEvent.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                               </div>
                           </div>
-                          <div className={`p-5 rounded-[2rem] border ${STATUS_STYLES[selectedEvent.extendedProps.status].bg.replace('100', '200')} ${STATUS_STYLES[selectedEvent.extendedProps.status].bg} shadow-inner`}>
+                          <div className={`p-5 rounded-[2rem] border ${currentStatusStyle.bg.replace('100', '200')} ${currentStatusStyle.bg} shadow-inner`}>
                               <span className="block text-[9px] font-black opacity-60 uppercase tracking-widest mb-2">Estado</span>
-                              <div className={`flex items-center gap-2 font-black text-xs uppercase ${STATUS_STYLES[selectedEvent.extendedProps.status].color}`}>
-                                  {React.createElement(STATUS_STYLES[selectedEvent.extendedProps.status].icon, { size: 16 })}
-                                  {STATUS_STYLES[selectedEvent.extendedProps.status].label}
+                              <div className={`flex items-center gap-2 font-black text-xs uppercase ${currentStatusStyle.color}`}>
+                                  {React.createElement(currentStatusStyle.icon, { size: 16 })}
+                                  {currentStatusStyle.label}
                               </div>
                           </div>
                       </div>
@@ -393,33 +391,44 @@ export default function AgendaAtencionPage() {
                           </div>
                       </div>
 
-                      <div className="space-y-4">
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Contacto de Paciente</label>
-                          <div className="grid grid-cols-1 gap-2">
-                              {selectedEvent.extendedProps.phone && (
-                                  <a href={`tel:${selectedEvent.extendedProps.phone}`} className="flex items-center gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:border-emerald-300 transition-all group">
-                                      <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-emerald-600 shadow-sm group-hover:bg-emerald-500 group-hover:text-white transition-all"><Phone size={18}/></div>
-                                      <div>
-                                          <span className="block text-[9px] text-slate-400 font-black uppercase tracking-widest">Móvil</span>
-                                          <span className="block text-sm font-black text-slate-800">{selectedEvent.extendedProps.phone}</span>
-                                      </div>
-                                  </a>
-                              )}
-                              {selectedEvent.extendedProps.email && (
-                                  <a href={`mailto:${selectedEvent.extendedProps.email}`} className="flex items-center gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:border-blue-300 transition-all group">
-                                      <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-blue-600 shadow-sm group-hover:bg-blue-500 group-hover:text-white transition-all"><Mail size={18}/></div>
-                                      <div className="min-w-0 flex-1">
-                                          <span className="block text-[9px] text-slate-400 font-black uppercase tracking-widest">Email</span>
-                                          <span className="block text-sm font-black text-slate-800 truncate">{selectedEvent.extendedProps.email}</span>
-                                      </div>
-                                  </a>
-                              )}
+                      {(selectedEvent.extendedProps.phone || selectedEvent.extendedProps.email) && (
+                          <div className="space-y-4">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Contacto de Paciente</label>
+                              <div className="grid grid-cols-1 gap-2">
+                                  {selectedEvent.extendedProps.phone && (
+                                      <a href={`tel:${selectedEvent.extendedProps.phone}`} className="flex items-center gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:border-emerald-300 transition-all group">
+                                          <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-emerald-600 shadow-sm group-hover:bg-emerald-500 group-hover:text-white transition-all"><Phone size={18}/></div>
+                                          <div>
+                                              <span className="block text-[9px] text-slate-400 font-black uppercase tracking-widest">Móvil</span>
+                                              <span className="block text-sm font-black text-slate-800">{selectedEvent.extendedProps.phone}</span>
+                                          </div>
+                                      </a>
+                                  )}
+                                  {selectedEvent.extendedProps.email && (
+                                      <a href={`mailto:${selectedEvent.extendedProps.email}`} className="flex items-center gap-4 p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:border-blue-300 transition-all group">
+                                          <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-blue-600 shadow-sm group-hover:bg-blue-500 group-hover:text-white transition-all"><Mail size={18}/></div>
+                                          <div className="min-w-0 flex-1">
+                                              <span className="block text-[9px] text-slate-400 font-black uppercase tracking-widest">Email</span>
+                                              <span className="block text-sm font-black text-slate-800 truncate">{selectedEvent.extendedProps.email}</span>
+                                          </div>
+                                      </a>
+                                  )}
+                              </div>
                           </div>
-                      </div>
+                      )}
+
+                      {selectedEvent.extendedProps.description && (
+                          <div>
+                              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Observaciones</label>
+                              <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-100 text-slate-600 text-sm italic relative">
+                                  <span className="absolute top-3 left-3 text-amber-200 text-5xl font-serif leading-none">“</span>
+                                  <p className="relative z-10 pl-4 pt-2">{selectedEvent.extendedProps.description}</p>
+                              </div>
+                          </div>
+                      )}
                   </div>
 
                   <div className="p-8 border-t border-slate-100 bg-slate-50/50 shrink-0">
-                      {/* ✅ CORRECCIÓN 2: Redirección correcta al perfil del paciente */}
                       <button 
                           onClick={() => router.push(`/navegacion/atencion/pacientes/perfil?id=${selectedEvent.extendedProps.patientId}`)}
                           className="w-full py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl shadow-slate-900/20 hover:bg-emerald-600 transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
