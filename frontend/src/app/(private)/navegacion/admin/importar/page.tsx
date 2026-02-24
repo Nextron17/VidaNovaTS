@@ -5,20 +5,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, FileText, Info, Loader2 // Importamos Loader2 para el spinner
+  AlertCircle, FileText, Info, Loader2 
 } from "lucide-react";
-import api from "@/src/app/services/api"; // ✅ Importamos tu cliente API
+import api from "@/src/app/services/api";
 
 export default function ImportarDataPage() {
   const [isClient, setIsClient] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false); // ✅ Estado de carga
+  const [uploading, setUploading] = useState(false);
   const router = useRouter();
 
   useEffect(() => { setIsClient(true); }, []);
 
-  // --- MANEJO DEL DRAG & DROP ---
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -42,28 +41,28 @@ export default function ImportarDataPage() {
     }
   };
 
-  // --- 🚀 LÓGICA DE SUBIDA AL BACKEND ---
+  // --- 🚀 LÓGICA DE SUBIDA CORREGIDA ---
   const handleUpload = async () => {
     if (!file) return;
 
     setUploading(true);
     const formData = new FormData();
-    formData.append("archivo", file); // 'archivo' debe coincidir con el backend (upload.single('archivo'))
+    
+    // ✅ CAMBIO 1: El campo debe llamarse 'file' para coincidir con upload.single('file') del backend
+    formData.append("file", file); 
 
     try {
-      // Petición al endpoint que creamos: /api/patients/upload
-      const res = await api.post("/navegacion/patients/upload", formData, {
+      // ✅ CAMBIO 2: La ruta correcta es /import
+      const res = await api.post("/navegacion/patients/import", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
       const stats = res.data.details;
       
-      // Mensaje de éxito
       alert(`✅ ¡Proceso Exitoso!\n\n📄 Total filas: ${stats.total}\n🆕 Nuevos pacientes: ${stats.created}\n🔄 Actualizados: ${stats.updated}`);
       
-      // Opcional: Redirigir a la lista de pacientes o limpiar
       setFile(null);
-      // router.push("/navegacion/admin"); // Descomentar si quieres redirigir
+      router.push("/navegacion/admin"); 
 
     } catch (error: any) {
       console.error("Error subiendo archivo:", error);
@@ -79,7 +78,7 @@ export default function ImportarDataPage() {
   return (
     <div className="w-full max-w-4xl mx-auto font-sans text-slate-800 pb-24 bg-white p-8">
       
-      {/* 1. HEADER SIMPLE */}
+      {/* 1. HEADER */}
       <div className="flex items-center gap-3 mb-8 border-b border-slate-100 pb-4">
         <Link href="/navegacion/admin" className="p-2 -ml-2 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-600 transition-colors">
             <ArrowLeft size={20}/>
@@ -90,7 +89,7 @@ export default function ImportarDataPage() {
         </div>
       </div>
 
-      {/* 2. ZONA DE CARGA (CARD PRINCIPAL) */}
+      {/* 2. ZONA DE CARGA */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
         <div className="bg-blue-600 p-6 text-white text-center">
             <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
@@ -121,7 +120,7 @@ export default function ImportarDataPage() {
                     className="hidden" 
                     accept=".xlsx,.xls,.csv"
                     onChange={handleFileChange}
-                    disabled={uploading} // Bloquear si está subiendo
+                    disabled={uploading}
                 />
                 
                 <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
@@ -141,13 +140,12 @@ export default function ImportarDataPage() {
                 </label>
             </div>
 
-            {/* Acciones */}
             <div className="flex justify-center mt-8 gap-4">
                 <Link href="/navegacion/admin" className={`px-6 py-3 rounded-full border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors ${uploading ? 'pointer-events-none opacity-50' : ''}`}>
                     Cancelar
                 </Link>
                 <button 
-                    onClick={handleUpload} // ✅ Conectado a la función real
+                    onClick={handleUpload} 
                     disabled={!file || uploading}
                     className="px-8 py-3 rounded-full bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                 >
@@ -165,7 +163,7 @@ export default function ImportarDataPage() {
         </div>
       </div>
 
-      {/* 3. GUÍA DE AYUDA (COLUMNAS) */}
+      {/* 3. GUÍA DE AYUDA */}
       <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
         <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <Info size={18} className="text-blue-500"/> Estructura Recomendada
@@ -173,29 +171,15 @@ export default function ImportarDataPage() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm text-slate-600">
             <ColumnItem label="Identificación (Cédula)" required />
-            <ColumnItem label="Nombre Completo (o Nombres / Apellidos)" required />
+            <ColumnItem label="Nombre Completo" required />
             <ColumnItem label="Teléfono / Celular" />
-            <ColumnItem label="Correo Electrónico" />
-            
             <ColumnItem label="EPS / Aseguradora" />
-            <ColumnItem label="Fecha Nacimiento / Edad" />
-            <ColumnItem label="Dirección / Ciudad" />
-            <ColumnItem label="Género" />
-        </div>
-
-        <div className="mt-6 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800 flex gap-3 items-start">
-            <div className="mt-0.5"><CheckCircle2 size={14}/></div>
-            <div>
-                <strong>Lógica Inteligente:</strong> Si subes un paciente que ya existe, el sistema actualizará sus datos (ej. si el nuevo archivo trae el teléfono actualizado). No duplica registros.
-            </div>
         </div>
       </div>
-
     </div>
   );
 }
 
-// --- COMPONENTE AUXILIAR ---
 function ColumnItem({ label, required }: { label: string, required?: boolean }) {
     return (
         <div className="flex items-center gap-2 py-1.5 border-b border-slate-200/50 last:border-0">
@@ -207,7 +191,6 @@ function ColumnItem({ label, required }: { label: string, required?: boolean }) 
             <span className={required ? "font-semibold text-slate-700" : "text-slate-500"}>
                 {label}
             </span>
-            {required && <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-600 font-bold ml-auto">Req</span>}
         </div>
     );
 }
