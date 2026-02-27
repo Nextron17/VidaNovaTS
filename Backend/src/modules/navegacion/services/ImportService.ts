@@ -26,6 +26,8 @@ export class ImportService {
     private static isGarbageID(id: string): boolean {
         if (!id) return true;
         const text = String(id).toUpperCase().replace(/\s/g, ''); 
+        
+        // 1. EL ESCUDO ANTI-BASURA (Tu lista original completa)
         const forbiddenWords = [
             'CEDULA', 'TARJETA', 'REGISTRO', 'CIVIL', 'NACIMIENTO', 'IDENTIDAD',
             'PERMISO', 'ESPECIAL', 'PERMANENCIA', 'PEP', 'PASAPORTE', 'ADULTO',
@@ -33,13 +35,23 @@ export class ImportService {
             'NOTA', 'DOCUMENTO', 'PACIENTE', 'AFILIADO', 'TIPO', 'NOMBRE', 'FECHA',
             'TOTAL', 'SUBTOTAL', 'PAGINA', 'HOJA'
         ];
+        
+        // Si el texto tiene alguna de estas palabras, es basura garantizada (ej. un encabezado colado)
         if (forbiddenWords.some(word => text.includes(word))) return true;
         
         const letterCount = text.replace(/[^A-Z]/g, '').length;
         const numberCount = text.replace(/[^0-9]/g, '').length;
         
+        // 2. Si no tiene ni un solo número, es imposible que sea un documento
         if (numberCount === 0) return true; 
+
+        // 3. EXCEPCIÓN DE SEGURIDAD: Si tiene 5 números o más y ya pasó el filtro de palabras, 
+        // asumimos que es un documento real (incluso si trae alguna letra rara al inicio como "PA123456")
+        if (numberCount >= 5) return false;
+        
+        // 4. Tu regla original para textos cortos confusos
         if (letterCount > 3 && letterCount > numberCount) return true;
+        
         return false;
     }
 
@@ -91,31 +103,47 @@ export class ImportService {
     private static parseDate(val: any): Date | null {
         if (!val) return null;
         let date: Date | null = null;
+        
         try {
+            // 1. Si es formato serial de Excel (número)
             if (typeof val === 'number' && val > 20000 && val < 60000) {
-                date = new Date(Math.round((val - 25569) * 86400 * 1000) + (5 * 3600 * 1000));
-            } else {
-                let str = String(val).trim().replace(/"/g, '');
-                if (str.includes(':') || str.includes('T')) {
-                    const tryDate = new Date(str);
-                    if (!isNaN(tryDate.getTime())) return tryDate;
+                return new Date(Math.round((val - 25569) * 86400 * 1000) + (5 * 3600 * 1000));
+            } 
+            
+            // 2. Si es String (como viene en tu CSV)
+            let str = String(val).trim().replace(/"/g, '');
+            
+            // Separar la fecha de la hora si existe (ej: "16/02/2026 16:42:00")
+            const datePart = str.split(' ')[0]; 
+            
+            // Reemplazar guiones por slashes para estandarizar
+            const normalizedDatePart = datePart.replace(/-/g, '/');
+            const parts = normalizedDatePart.split('/');
+            
+            if (parts.length === 3) {
+                const p0 = parseInt(parts[0], 10);
+                const p1 = parseInt(parts[1], 10);
+                const p2 = parseInt(parts[2], 10);
+                
+                // Determinar si es DD/MM/YYYY o YYYY/MM/DD
+                if (parts[0].length === 4) {
+                    date = new Date(p0, p1 - 1, p2); 
+                } else if (parts[2].length === 4) {
+                    date = new Date(p2, p1 - 1, p0); 
                 }
-                if (str.includes(' ')) str = str.split(' ')[0]; 
-                str = str.replace(/-/g, '/'); 
-                const parts = str.split('/');
-                if (parts.length === 3) {
-                    const p0 = parseInt(parts[0]);
-                    const p1 = parseInt(parts[1]);
-                    const p2 = parseInt(parts[2]);
-                    if (parts[0].length === 4) date = new Date(p0, p1 - 1, p2); 
-                    else if (parts[2].length === 4) date = new Date(p2, p1 - 1, p0);
-                }
+            } else if (str.includes('T')) {
+                // Formato ISO
+                date = new Date(str);
             }
+
+            // Validar que la fecha sea lógica
             if (date && !isNaN(date.getTime())) {
                 if (date.getFullYear() < 1900 || date.getFullYear() > 2100) return null;
                 return date;
             }
-        } catch (e) { return null; }
+        } catch (e) { 
+            return null; 
+        }
         return null;
     }
 

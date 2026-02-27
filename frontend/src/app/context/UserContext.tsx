@@ -1,10 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/src/app/services/api';
 
-// 🛡️ 1. DEFINIMOS TODOS LOS ROLES VÁLIDOS (Añadido AUDITOR que existía en tu backend)
 export type UserRole = 'SUPER_ADMIN' | 'COORDINATOR_NAVIGATOR' | 'NAVIGATOR' | 'AUDITOR';
 
 export interface User {
@@ -13,32 +12,32 @@ export interface User {
     documentNumber: string; 
     email?: string;         
     phone?: string;
-    role: UserRole; // Enlace estricto al tipo de roles
+    role: UserRole;
     status: "online" | "offline" | "busy";
     avatarColor?: string;   
 }
 
-// 🛡️ 2. EXPORTAMOS LA INTERFAZ (Para que el RoleGuard pueda usar 'isLoading')
 export interface UserContextType {
     user: User | null;
     token: string | null;
     login: (token: string, userData: User) => void;
-    logout: () => void;
-    isLoading: boolean; // Vital para que el Guardián sepa cuándo terminó de leer el localStorage
+    logout: (reason?: string) => void; // 👈 Añadimos un motivo opcional
+    isLoading: boolean;
     refreshUser: () => Promise<void>; 
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+// ⏱️ TIEMPO DE INACTIVIDAD PERMITIDO (Ej: 15 minutos en milisegundos)
+const INACTIVITY_LIMIT = 15 * 60 * 1000; 
+
 export const UserProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
-    
-    // Inicia en TRUE para que la app no intente dibujar vistas protegidas hasta leer el localStorage
     const [isLoading, setIsLoading] = useState(true); 
     const router = useRouter();
 
-    // --- CARGA INICIAL SILENCIOSA ---
+    // --- CARGA INICIAL (Mantenemos tu lógica igual) ---
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
@@ -47,27 +46,60 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             try {
                 const parsedUser: User = JSON.parse(storedUser);
                 setToken(storedToken);
-                
-                // Restauramos estilo visual
-                const userWithStyle = { 
-                    ...parsedUser, 
-                    avatarColor: parsedUser.avatarColor || 'from-slate-700 to-slate-900' 
-                };
-                
-                setUser(userWithStyle);
+                setUser({ ...parsedUser, avatarColor: parsedUser.avatarColor || 'from-slate-700 to-slate-900' });
                 api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
             } catch (e) {
-                console.error("Error recuperando sesión:", e);
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
             }
         }
-        
-        // Finaliza la carga, ahora el RoleGuard sabe que puede verificar los roles
         setIsLoading(false);
     }, []);
 
-    // --- LOGIN Y REDIRECCIÓN ESTRATÉGICA ---
+    // --- 🛡️ SISTEMA DE CIERRE POR INACTIVIDAD ---
+    const logout = useCallback((reason?: string) => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setToken(null);
+        setUser(null);
+        delete api.defaults.headers.common['Authorization'];
+        
+        if (reason) {
+            alert(reason); // Opcional: Cambiar por un Toast bonito si usas Sonner/React-Hot-Toast
+        }
+        
+        router.push('/login');
+    }, [router]);
+
+    useEffect(() => {
+        let inactivityTimer: NodeJS.Timeout;
+
+        // Solo activamos el vigilante si hay un usuario logueado
+        if (!token) return;
+
+        const resetTimer = () => {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(() => {
+                logout("⚠️ Tu sesión ha sido cerrada por seguridad tras 15 minutos de inactividad.");
+            }, INACTIVITY_LIMIT);
+        };
+
+        // Escuchamos eventos clave (No usamos mousemove para no saturar la memoria)
+        const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+        
+        events.forEach(event => window.addEventListener(event, resetTimer));
+        
+        // Inicializar el primer timer
+        resetTimer();
+
+        return () => {
+            clearTimeout(inactivityTimer);
+            events.forEach(event => window.removeEventListener(event, resetTimer));
+        };
+    }, [token, logout]); // Se re-ejecuta si el token cambia o si hacen logout
+
+
+    // --- LOGIN Y REFRESH (Mantenemos tu lógica igual) ---
     const login = (newToken: string, userData: User) => {
         localStorage.setItem('token', newToken);
         localStorage.setItem('user', JSON.stringify(userData));
@@ -75,26 +107,13 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setUser(userData);
         api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
-        console.log(`🔐 Acceso autorizado: ${userData.role}`);
-
-        // 🚀 LÓGICA DE REDIRECCIÓN (Redirige basándose en el rol estricto)
         if (['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR', 'AUDITOR'].includes(userData.role)) {
             router.push('/navegacion/admin'); 
         } else if (userData.role === 'NAVIGATOR') {
-            router.push('/navegacion/atencion/pacientes'); // Corregido: apunto directo a la lista de pacientes
+            router.push('/navegacion/atencion/pacientes');
         } else {
-            alert("Tu rol no tiene acceso al módulo de Navegación.");
-            logout();
+            logout("Rol no autorizado.");
         }
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setToken(null);
-        setUser(null);
-        delete api.defaults.headers.common['Authorization'];
-        router.push('/login');
     };
 
     const refreshUser = async () => {
@@ -105,8 +124,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             setUser(fetchedUser); 
             localStorage.setItem('user', JSON.stringify(fetchedUser));
         } catch (error: any) {
-            // Si el backend responde 401 (token expirado o cuenta suspendida), lo sacamos a patadas.
-            if (error.response?.status === 401) logout();
+            if (error.response?.status === 401) logout("Sesión expirada");
         }
     };
 
@@ -119,6 +137,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
 export const useUser = () => {
     const context = useContext(UserContext);
-    if (context === undefined) throw new Error('useUser debe usarse dentro de un UserProvider');
+    if (context === undefined) throw new Error('useUser error');
     return context;
 };

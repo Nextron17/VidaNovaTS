@@ -15,8 +15,10 @@ export class CupsController {
     
     // MOTOR DE INTELIGENCIA DE NEGOCIO PARA CATEGORIZAR CUPS
     
+    // MOTOR DE INTELIGENCIA DE NEGOCIO PARA CATEGORIZAR CUPS
+    
     public static async runAutoCategorization() {
-        console.log("🌱 EJECUTANDO CLASIFICACIÓN V15 (CON 'OTROS')...");
+        console.log("🌱 EJECUTANDO CLASIFICACIÓN V15 (OPTIMIZADA Y PROTEGIDA)...");
         
         const MODALIDADES: Record<string, string[]> = {
             'Consulta Externa': [
@@ -111,8 +113,6 @@ export class CupsController {
                 'ONCOLOGIA', 'CANCER', 'TUMOR', 'NEOPLASIA', 'CARCINOMA',
                 'SARCOMA', 'LINFOMA', 'LEUCEMIA', 'MELANOMA', 'BLASTOMA'
             ],
-
-            // ESTA CATEGORIA ES PARA LOS CUPS QUE NO ENCAJAN EN NINGUNA DE LAS ANTERIORES  
             'Otros': [
                 'TRANSPORTE', 'TRASLADO', 'AMBULANCIA', 'MOVILIZACION', 
                 'COPIA', 'FOTOCOPIA', 'CERTIFICADO', 'HISTORIA CLINICA',
@@ -121,7 +121,6 @@ export class CupsController {
             ]
         };
 
-               // 2. DICCIONARIO DE CAC 
         const DIAGNOSTICOS: Record<string, string[]> = {
             '1= CAC Mama': ['C50', 'C500', 'C501', 'C502', 'C503', 'C504', 'C505', 'C506', 'C508', 'C509', 'D05', 'D050', 'D051', 'D057', 'D059', 'MAMA', 'MASTOLOGIA', 'HER-2', 'BRCA', 'CUADRANTE', 'MASTECTOMIA', 'PEZON', 'AREOLA', 'AXILAR', 'CARCINOMA IN SITU DE LA MAMA', 'INTRACANALICULAR', 'LOBULAR'],
             '2= CAC Próstata': ['C61', 'C61X', 'D075', 'PROSTATA', 'PSA', 'ANTIGENO ESPECIFICO DE PROSTATA', 'PROSTATECTOMIA', 'TUMOR MALIGNO DE LA PROSTATA', 'CARCINOMA IN SITU DE LA PROSTATA'],
@@ -150,19 +149,28 @@ export class CupsController {
             '25= Tumores secundarios': ['C77', 'C78', 'C79', 'SECUNDARIO', 'METASTASIS', 'GANGLIOS LINFATICOS SECUNDARIOS', 'RESPIRATORIOS SECUNDARIOS', 'DIGESTIVOS SECUNDARIOS']
         };
 
-
-
-        const allRecords = await FollowUp.findAll({
-            attributes: ['id', 'serviceName', 'category', 'observation']
+        // 🚀 OPTIMIZACIÓN DE RENDIMIENTO
+        // Solo traemos los registros que no tienen categoría, dicen PENDIENTE, o tienen un formato viejo (ej. CAC)
+        const recordsToCategorize = await FollowUp.findAll({
+            attributes: ['id', 'serviceName', 'category', 'observation'],
+            where: {
+                [Op.or]: [
+                    { category: null },
+                    { category: '' },
+                    { category: 'PENDIENTE' },
+                    { category: { [Op.iLike]: '%CAC%' } } 
+                ]
+            }
         });
 
-        console.log(`📊 TOTAL REGISTROS: ${allRecords.length}`);
+        console.log(`📊 REGISTROS PENDIENTES DE CLASIFICAR: ${recordsToCategorize.length}`);
+        if (recordsToCategorize.length === 0) return 0;
 
         let updatedCount = 0;
         const transaction = await sequelize.transaction();
 
         try {
-            for (const record of allRecords) {
+            for (const record of recordsToCategorize) {
                 const texto = CupsController.normalizeText(record.serviceName || '');
                 let newCategory = 'Oncología';
                 let foundModality = false;
@@ -194,7 +202,7 @@ export class CupsController {
                     }
                 }
 
-                // 3. Update
+                // 3. Preparar Actualización
                 let newObservation = record.observation || '';
                 let needsUpdate = false;
 
@@ -205,12 +213,13 @@ export class CupsController {
 
                 const currentCategory = record.category || '';
                 const isPending = !currentCategory || currentCategory === 'PENDIENTE' || currentCategory === '';
-                const isLegacy = !Object.keys(MODALIDADES).includes(currentCategory);
+                const isLegacy = currentCategory.includes('CAC');
 
-                if (currentCategory !== newCategory || isPending || isLegacy || needsUpdate) {
-                    
-                    if (isLegacy && currentCategory.includes('CAC') && !newObservation.includes('COHORTE ANTERIOR')) {
+                // Si es pendiente o tiene formato viejo, le asignamos la nueva categoría
+                if (isPending || isLegacy) {
+                    if (isLegacy && !newObservation.includes('COHORTE ANTERIOR')) {
                         newObservation = `${newObservation} | COHORTE ANTERIOR: ${currentCategory}`;
+                        needsUpdate = true;
                     }
 
                     await FollowUp.update(
@@ -218,6 +227,14 @@ export class CupsController {
                             category: newCategory,
                             observation: newObservation 
                         },
+                        { where: { id: record.id }, transaction }
+                    );
+                    updatedCount++;
+                } 
+                // Si la categoría estaba bien pero le encontramos un diagnóstico sugerido
+                else if (needsUpdate) {
+                    await FollowUp.update(
+                        { observation: newObservation },
                         { where: { id: record.id }, transaction }
                     );
                     updatedCount++;
@@ -234,8 +251,6 @@ export class CupsController {
     }
 
     
-    
-
     static fixLegacyCategories = async (req: Request, res: Response) => {
         try {
             const count = await CupsController.runAutoCategorization();

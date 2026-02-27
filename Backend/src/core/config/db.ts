@@ -2,12 +2,14 @@ import { Sequelize } from 'sequelize-typescript';
 import * as path from 'path';
 import dotenv from 'dotenv';
 import colors from 'colors';
+import bcrypt from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 
 // 1. IMPORTACIÓN MANUAL DE MODELOS
 import { User } from '../../modules/usuarios/models/User';
 import { Patient } from '../../modules/navegacion/models/Patient';
 import { FollowUp } from '../../modules/navegacion/models/FollowUp';
+import { AuditLog } from '../models/AuditLog'; 
 
 // Carga el .env
 dotenv.config();
@@ -23,7 +25,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 const dbUser = process.env.DB_USER || '';
-// Extrae 'igusfieacmzhwikasnqi' del string 'postgres.igusfieacmzhwikasnqi'
+// Extrae el ID del proyecto del string de usuario de Postgres
 const projectID = dbUser.includes('.') ? dbUser.split('.')[1] : '';
 
 // 2. CLIENTE API (Respaldo HTTPS)
@@ -32,43 +34,69 @@ export const supabase = createClient(
     supabaseServiceKey || 'placeholder'
 );
 
-// 3. CONFIGURACIÓN SEQUELIZE
+// 3. CONFIGURACIÓN SEQUELIZE (MODO CARGA MASIVA - 15 MINUTOS)
 export const sequelize = new Sequelize({
     dialect: 'postgres',
     host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT) || 6543,
+    // 🚀 PUERTO DIRECTO: Cambiamos a 5432 para saltarnos el Pooler de Supabase que corta conexiones
+    port: Number(process.env.DB_PORT) || 5432, 
     username: dbUser,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'postgres',
-    models: [User, Patient, FollowUp], 
+    models: [User, Patient, FollowUp, AuditLog], 
     logging: false,
     dialectOptions: {
         ssl: { 
             require: true, 
             rejectUnauthorized: false 
         },
-        // 🔑 CLAVE: Inyectamos el ID del proyecto dinámicamente
+        // 🚀 PACIENCIA DE LA DB: 15 minutos (900,000 milisegundos)
+        statement_timeout: 900000, 
         options: projectID ? `-c project=${projectID}` : undefined
     },
     pool: { 
-        max: 5, 
+        max: 15,         // Más conexiones simultáneas
         min: 0, 
-        acquire: 30000, 
-        idle: 10000 
+        acquire: 900000, // 🚀 PACIENCIA DE CONEXIÓN: 15 minutos
+        idle: 30000 
     }
 });
 
+// 🛡️ FUNCIÓN PARA CREAR USUARIO ADMIN INICIAL
+async function seedAdminUser() {
+    try {
+        const userCount = await User.count();
+        if (userCount === 0) {
+            console.log(colors.magenta('🗄️ Base de datos vacía: Generando Administrador...'));
+            const hashedPassword = await bcrypt.hash('admin123', 10);
+            await User.create({
+                name: 'Administrador Principal',
+                email: 'felipesamboni17@gmail.com',
+                documentNumber: '12345678', // Usuario para iniciar sesión
+                password: hashedPassword,
+                role: 'ADMIN',
+                status: true
+            } as any);
+            console.log(colors.bgMagenta.white(' ✅ ADMIN CREADO: Doc 12345678 | Clave admin123 '));
+        }
+    } catch (e) { console.error("Error Seeder:", e); }
+}
+
+// 4. FUNCIÓN DE CONEXIÓN Y SINCRONIZACIÓN
 export async function connectDB() {
     try {
         console.log(colors.yellow(`⏳ [VIDANOVA] Validando acceso al proyecto: ${projectID}...`));
         
         // Intentar conexión binaria
         await sequelize.authenticate();
-        console.log(colors.green('✅ [SEQUELIZE] Conexión binaria establecida.'));
+        console.log(colors.green('✅ [SEQUELIZE] Conexión directa establecida (Puerto 5432).'));
         
-        // Sincronización de tablas
+        // 🔄 Sincronización de tablas
         await sequelize.sync({ alter: true });
         console.log(colors.green('✅ [DATABASE] Modelos sincronizados correctamente.'));
+
+        // Crea el administrador si borraste la base de datos
+        await seedAdminUser();
 
     } catch (error: any) {
         console.log(colors.bgRed.white('\n ⚠️ AVISO DE CONEXIÓN '));

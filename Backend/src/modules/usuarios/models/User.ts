@@ -2,6 +2,7 @@ import { Table, Column, Model, DataType, BeforeCreate, BeforeUpdate, HasMany } f
 import bcrypt from 'bcryptjs';
 import { Patient } from '../../navegacion/models/Patient';
 import { FollowUp } from '../../navegacion/models/FollowUp';
+import { AuditLog } from '../../../core/models/AuditLog'; // 👈 Asegúrate de que la ruta sea correcta
 
 @Table({
     tableName: 'users',
@@ -36,15 +37,14 @@ export class User extends Model {
     password!: string;
 
     @Column({
-        type: DataType.ENUM(
-            'SUPER_ADMIN',
-            'COORDINATOR_NAVIGATOR',
-            'NAVIGATOR',
-            'AUDITOR'
-        ),
-        defaultValue: 'NAVIGATOR'
-    })
-    role!: string;
+    type: DataType.ENUM(
+        'SUPER_ADMIN',
+        'COORDINATOR_NAVIGATOR',
+        'NAVIGATOR'
+    ),
+    defaultValue: 'NAVIGATOR'
+})
+role!: string;
 
     @Column({
         type: DataType.ENUM('online', 'offline', 'busy'),
@@ -64,11 +64,11 @@ export class User extends Model {
     })
     avatarColor!: string;
 
-    // 🛡️ NUEVO CAMPO: SEGURIDAD DE ACCESO (Activo / Inactivo)
+    // 🛡️ SEGURIDAD DE ACCESO
     @Column({
         type: DataType.BOOLEAN,
         allowNull: false,
-        defaultValue: true // Todo usuario nuevo nace activo por defecto
+        defaultValue: true 
     })
     isActive!: boolean;
 
@@ -79,23 +79,35 @@ export class User extends Model {
     @Column({ type: DataType.DATE, allowNull: true })
     resetPasswordExpires!: Date | null;
 
-    // ✅ RELACIONES: LO QUE ESTE USUARIO POSEE/CONTROLA
+    // ==========================================
+    // ✅ RELACIONES
+    // ==========================================
+
     @HasMany(() => Patient)
     patients!: Patient[];
 
     @HasMany(() => FollowUp)
     followups!: FollowUp[];
 
-    // HOOKS
+    // 🕵️ REGISTROS DE ACTIVIDAD (Auditoría)
+    @HasMany(() => AuditLog)
+    auditLogs!: AuditLog[];
+
+    // ==========================================
+    // ⚡ HOOKS
+    // ==========================================
+
     @BeforeCreate
     @BeforeUpdate
     static async handleSecurityAndStyle(user: User) {
+        // Encriptación de contraseña
         if (user.changed('password')) {
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(user.password, salt);
         }
 
-        if (!user.avatarColor || user.avatarColor === 'bg-blue-500') {
+        // Asignación de color de avatar aleatorio si es por defecto
+        if (!user.avatarColor || user.avatarColor === 'bg-blue-500' || user.avatarColor === 'from-blue-600 to-indigo-600') {
             const gradients = [
                 'from-pink-500 to-rose-500',
                 'from-blue-600 to-cyan-500',
@@ -108,7 +120,10 @@ export class User extends Model {
         }
     }
 
-    // MÉTODOS DE INSTANCIA
+    // ==========================================
+    // 🛠️ MÉTODOS DE INSTANCIA
+    // ==========================================
+
     async checkPassword(password: string): Promise<boolean> {
         return await bcrypt.compare(password, this.password);
     }

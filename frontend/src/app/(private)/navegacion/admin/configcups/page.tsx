@@ -52,17 +52,20 @@ const mapCategoryToModality = (dbCategory: string): string => {
 
 // --- 3. ESTILOS VISUALES ---
 const getBadgeStyles = (grupoVisual: string) => {
-    const g = String(grupoVisual || "").toUpperCase(); 
+    // Quitamos tildes y pasamos a mayúsculas para comparar siempre bien
+    const g = String(grupoVisual || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(); 
+    
     if (g === 'QUIMIOTERAPIA') return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', icon: Syringe };
     if (g === 'RADIOTERAPIA') return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: Activity };
-    if (g === 'IMAGENOLOGÍA') return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: Layers };
+    if (g === 'IMAGENOLOGIA') return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: Layers };
     if (g === 'LABORATORIO') return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: FlaskConical };
-    if (g === 'CIRUGÍA') return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: Scissors };
+    if (g === 'CIRUGIA') return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: Scissors };
     if (g === 'CONSULTA EXTERNA') return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: Stethoscope };
     if (g === 'ESTANCIA') return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: Bed };
-    if (g === 'CLÍNICA DEL DOLOR') return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', icon: HeartPulse };
-    if (g === 'ONCOLOGÍA') return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', icon: FileText };
+    if (g === 'CLINICA DEL DOLOR') return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', icon: HeartPulse };
+    if (g === 'ONCOLOGIA') return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', icon: FileText };
     if (g === 'OTROS') return { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', icon: HelpCircle };
+    
     return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: AlertCircle };
 };
 

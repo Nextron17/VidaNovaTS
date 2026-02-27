@@ -154,16 +154,19 @@ export default function AgendaAtencionPage() {
           fetchEvents(dateInfo.start, dateInfo.end);
       }, 500); 
   }, [fetchEvents]);
-
-  // --- PROCESAMIENTO MEMOIZADO (Rápido) ---
+  // --- PROCESAMIENTO MEMOIZADO (Super Optimizado) ---
   const processedEvents = useMemo(() => {
       const allEvents: any[] = [];
       const lowerSearch = debouncedSearch.toLowerCase();
 
+      // Validación de seguridad por si rawEvents viene null o no es un array
+      if (!Array.isArray(rawEvents)) return [];
+
       rawEvents.forEach((p: any) => {
-          if (!p.followups?.length) return;
+          if (!p.followups || !Array.isArray(p.followups)) return;
 
           p.followups.forEach((f: any) => {
+              // 1. Detección de Categoría más robusta
               let typeKey = (f.category || 'OTROS').toUpperCase().trim();
               if (typeKey.includes('IMAGEN')) typeKey = 'IMAGEN';
               else if (typeKey.includes('QUIMIO')) typeKey = 'QUIMIOTERAPIA';
@@ -172,35 +175,42 @@ export default function AgendaAtencionPage() {
               else if (typeKey.includes('LAB')) typeKey = 'LABORATORIO';
               if (!EVENT_STYLES[typeKey]) typeKey = 'OTROS';
 
+              // Filtro de categorías del sidebar
               if (!selectedTypes.includes(typeKey)) return;
 
-              const eventDate = f.dateAppointment || f.dateRequest;
-              if (!eventDate) return;
+              // 2. Manejo de Fechas (Si no hay cita, se usa la fecha de solicitud, si no, HOY)
+              // ESTO EVITA QUE LOS EVENTOS DESAPAREZCAN DEL CALENDARIO
+              const eventDateStr = f.dateAppointment || f.dateRequest || p.createdAt || new Date().toISOString();
+              const eventDate = new Date(eventDateStr);
+              
+              // Evitar fechas inválidas
+              if (isNaN(eventDate.getTime())) return;
 
               const serviceName = f.serviceName || f.cups || 'Trámite de Navegación';
-              const patientName = `${p.firstName} ${p.lastName}`;
+              const patientName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'SIN NOMBRE';
 
+              // 3. Buscador optimizado
               if (debouncedSearch && 
                   !patientName.toLowerCase().includes(lowerSearch) && 
-                  !serviceName.toLowerCase().includes(lowerSearch)) {
+                  !serviceName.toLowerCase().includes(lowerSearch) &&
+                  !(p.documentNumber || '').includes(debouncedSearch)) { // Añadido búsqueda por cédula
                   return;
               }
 
               const style = EVENT_STYLES[typeKey];
-              const dateObj = new Date(eventDate);
-              const isAllDay = dateObj.getHours() === 0 && dateObj.getMinutes() === 0;
-              const endDateObj = new Date(dateObj);
-              endDateObj.setMinutes(dateObj.getMinutes() + 45); 
+              const isAllDay = eventDate.getHours() === 0 && eventDate.getMinutes() === 0;
+              const endDateObj = new Date(eventDate);
+              endDateObj.setMinutes(eventDate.getMinutes() + 45); 
 
               allEvents.push({
                   id: f.id.toString(),
                   title: patientName,
-                  start: eventDate,
+                  start: eventDateStr, // FullCalendar prefiere strings ISO
                   end: isAllDay ? undefined : endDateObj.toISOString(),
                   allDay: isAllDay,
                   backgroundColor: 'transparent', 
                   borderColor: 'transparent',
-                  textColor: '#1e3a8a', // Texto Azul Oscuro
+                  textColor: '#1e3a8a', 
                   color: style.hex,
                   extendedProps: {
                       type: typeKey,
@@ -208,11 +218,11 @@ export default function AgendaAtencionPage() {
                       patientName: patientName,
                       serviceName: serviceName,
                       status: (f.status || 'PENDIENTE'),
-                      description: f.observation,
-                      cups: f.cups,
-                      eps: p.insurance,
-                      phone: p.phone,
-                      email: p.email
+                      description: f.observation || 'Sin observaciones.',
+                      cups: f.cups || 'N/A',
+                      eps: p.insurance || 'SIN EPS',
+                      phone: p.phone || '---',
+                      email: p.email || '---'
                   }
               });
           });

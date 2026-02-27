@@ -167,7 +167,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                     </div>
 
                     <button 
-                        onClick={logout}
+                        onClick={() => logout()} // 👈 ¡ESTE ES EL CAMBIO!
                         title="Salir"
                         className={`text-slate-400 hover:text-red-400 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors flex-shrink-0 ${!isExpanded && 'hidden'}`}
                     >

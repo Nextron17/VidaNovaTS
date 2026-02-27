@@ -157,7 +157,7 @@ const Header: React.FC<HeaderProps> = ({ isSidebarOpen, toggleSidebar }) => {
                                 <div className="h-px bg-slate-100 my-1 mx-2"></div>
 
                                 <button 
-                                    onClick={logout} 
+                                    onClick={() => logout()} 
                                     className="w-full px-4 py-3 hover:bg-rose-50 rounded-2xl flex items-center gap-3 text-slate-600 transition-all group"
                                 >
                                     <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100 group-hover:border-rose-200 transition-colors">

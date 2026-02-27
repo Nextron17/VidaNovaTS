@@ -122,7 +122,7 @@ const Header: React.FC<HeaderProps> = ({ isSidebarOpen, toggleSidebar }) => {
                                     <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100 group-hover:border-blue-200 transition-colors"><Settings size={16} className="text-slate-400 group-hover:text-blue-500"/></div>
                                     <span className="text-xs font-bold uppercase group-hover:text-blue-600">Configuración</span>
                                 </Link>
-                                <button onClick={logout} className="w-full px-4 py-3 hover:bg-red-50 rounded-2xl flex items-center gap-3 text-slate-600 transition-all group">
+                                <button onClick={() => logout()} className="w-full px-4 py-3 hover:bg-red-50 rounded-2xl flex items-center gap-3 text-slate-600 transition-all group">
                                     <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100 group-hover:border-red-200 transition-colors"><LogOut size={16} className="text-slate-400 group-hover:text-red-500"/></div>
                                     <span className="text-xs font-bold uppercase group-hover:text-red-600">Cerrar Sesión</span>
                                 </button>

@@ -11,6 +11,9 @@ import {
 import api from "@/src/app/services/api";
 import axios from "axios";
 
+// 🕵️ IMPORTACIÓN DEL COMPONENTE DE AUDITORÍA
+import AuditBadge from "@/src/app/(private)/navegacion/components/AuditBadge"
+
 // --- TIPOS DE DATOS ---
 interface Patient {
   id: number;
@@ -26,6 +29,7 @@ interface Patient {
   status: 'ACTIVO' | 'INACTIVO' | 'FALLECIDO';
   stage?: string;
   updatedAt?: string;
+  auditLogs?: any[]; // 👈 Añadido para que Typescript no llore al pasar la prop
 }
 
 // --- UTILS ---
@@ -211,7 +215,7 @@ export default function PacientesAtencionPage() {
             <Link 
               key={patient.id} 
               href={`/navegacion/atencion/pacientes/perfil?id=${patient.id}`} 
-              className="group bg-white rounded-[2rem] p-7 border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-emerald-900/5 hover:border-emerald-100 transition-all duration-500 relative overflow-hidden block"
+              className="group bg-white rounded-[2rem] p-7 border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-emerald-900/5 hover:border-emerald-100 transition-all duration-500 relative overflow-hidden block flex flex-col"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               
@@ -239,7 +243,7 @@ export default function PacientesAtencionPage() {
                 </div>
               </div>
 
-              <div className="space-y-3 mb-6">
+              <div className="space-y-3 mb-6 flex-1">
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-600 uppercase tracking-tight">
                   <Activity size={16} className="text-emerald-500 shrink-0"/>
                   <span className="truncate flex-1" title={patient.insurance}>
@@ -258,9 +262,12 @@ export default function PacientesAtencionPage() {
                     {[patient.city, patient.department].filter(Boolean).join(', ') || 'Sin ubicación'}
                   </span>
                 </div>
+
+                {/* 🕵️ AQUÍ ESTÁ EL COMPONENTE DE AUDITORÍA INYECTADO */}
+                <AuditBadge logs={patient.auditLogs || []} />
               </div>
 
-              <div className="flex items-center justify-between pt-5 border-t border-slate-50">
+              <div className="flex items-center justify-between pt-5 border-t border-slate-50 mt-auto">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
                     patient.status === 'ACTIVO' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'

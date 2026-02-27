@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
-// 👇 1. IMPORTAMOS EL PROVIDER (Asegúrate que la ruta coincida con donde lo guardaste)
 import { UserProvider } from "@/src/app/context/UserContext";
+// 👇 IMPORTAMOS EL COMPONENTE DE SEGURIDAD
+import IdleLogout from "@/src/app/components/IdleLogout";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,8 +20,9 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={inter.className}>
-        {/* 👇 2. ENVOLVEMOS TODO (children) CON EL PROVIDER */}
         <UserProvider>
+          {/* 👇 ACTIVAMOS LA PROTECCIÓN GLOBAL */}
+          <IdleLogout />
           {children}
         </UserProvider>
       </body>

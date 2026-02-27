@@ -5,13 +5,15 @@ import { ImportService } from '../services/ImportService';
 import { Op } from 'sequelize';
 import { sequelize } from '../../../core/config/db'; 
 import { CupsController } from './CupsController';
+import { User } from '../../usuarios/models/User'; 
+
+import { AuditLog } from '../../../core/models/AuditLog'; 
 
 export class PatientController {
 
     // 1. IMPORTACIÓN MASIVA (EXCEL/CSV) CON BLINDAJE
     static importPatients = async (req: Request, res: Response) => {
         try {
-            // 🛡️ 1. Validación de existencia del archivo (Por si Multer lo bloqueó por peso/formato)
             if (!req.file) {
                 return res.status(400).json({ 
                     success: false, 
@@ -19,10 +21,21 @@ export class PatientController {
                 });
             }
             
-            // 2. Procesamiento del Excel
             const result = await ImportService.processPatientExcel(req.file.buffer);
             
-            // 3. Respuesta exitosa
+            // 🕵️‍♂️ AUDITORÍA: Registro de importación masiva
+            const operatorId = req.user?.id;
+            if (operatorId) {
+                await AuditLog.create({
+                    userId: operatorId,
+                    action: 'IMPORT',
+                    tableName: 'Patients/FollowUps',
+                    recordId: 'MASIVO',
+                    oldValues: null,
+                    newValues: { sheetsProcessed: result.createdPatients, updates: result.updatedPatients }
+                });
+            }
+
             res.json({ 
                 success: true,
                 message: 'Proceso de importación finalizado', 
@@ -30,118 +43,30 @@ export class PatientController {
             });
         } catch (error: any) {
             console.error("❌ Error Importando:", error);
-
-            // 🛡️ 4. Manejo de Errores Específicos
             if (error.message && error.message.includes('FORMATO_INVALIDO')) {
                 return res.status(400).json({ success: false, error: error.message });
             }
-
             res.status(500).json({ success: false, error: 'Error interno al procesar el archivo.' });
         }
     }
 
-    // 2. LISTAR PACIENTES (Filtros Múltiples + Estadísticas)
-    static getPatients = async (req: Request, res: Response) => {
-        try {
-            const { 
-                page = 1, 
-                limit = 10, 
-                search = '', 
-                eps = '', 
-                status = '', 
-                cohorte = '', 
-                startDate,
-                endDate
-            } = req.query;
-            
-            // Log para verificar que el filtro llega al servidor
-            console.log("🔍 FILTRO RECIBIDO:", { cohorte, status }); 
+    // 2. LISTAR PACIENTES (Solo lectura - No requiere auditoría)
+   static getPatients = async (req: Request, res: Response) => {
+    try {
+        const { 
+            page = 1, limit = 10, search = '', eps = '', status = '', 
+            cohorte = '', startDate, endDate, onlyStats = 'false' 
+        } = req.query;
 
-            const offset = (Number(page) - 1) * Number(limit);
-            
-            // A. Filtros del PACIENTE
-            const patientWhere: any = {};
-
-            if (eps && eps !== 'TODAS') {
-                patientWhere.insurance = { [Op.like]: `%${eps}%` };
-            }
-
-            if (search) {
-                patientWhere[Op.or] = [
-                    { documentNumber: { [Op.like]: `%${search}%` } },
-                    { firstName: { [Op.like]: `%${search}%` } },
-                    { lastName: { [Op.like]: `%${search}%` } }
-                ];
-            }
-
-            // B. Filtros del SEGUIMIENTO 
-            const followUpWhere: any = {};
-            let hasFollowUpFilters = false; 
-
-            // 1. Estado
-            if (status && status !== 'TODOS') {
-                followUpWhere.status = status;
-                hasFollowUpFilters = true;
-            }
-
-            // 2. Fechas
-            if (startDate && endDate) {
-                followUpWhere.dateRequest = {
-                    [Op.between]: [new Date(startDate as string), new Date(endDate as string)]
-                };
-                hasFollowUpFilters = true;
-            }
-
-            // 3. Modalidad / Cohorte 
-            if (cohorte) {
-                const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
-                
-                if (filtrosList.length > 0) {
-                    followUpWhere[Op.or] = filtrosList.map(filtro => ({
-                        [Op.or]: [
-                            // Busca en Categoría ("Imagenología")
-                            { category: { [Op.like]: `%${filtro}%` } },
-                            // Busca en Observación ("1= CAC Mama")
-                            { observation: { [Op.like]: `%${filtro}%` } }
-                        ]
-                    }));
-                    hasFollowUpFilters = true;
-                }
-            }
-
-            // Configuración del JOIN
-            const includeOptions: any[] = [{
-                model: FollowUp,
-                as: 'followups',
-                required: hasFollowUpFilters,
-                where: hasFollowUpFilters ? followUpWhere : undefined,
-                order: [['dateRequest', 'DESC']]
-            }];
-
-            // C. Ejecutar Consulta
-            const { count, rows } = await Patient.findAndCountAll({
-                where: patientWhere,
-                include: includeOptions,
-                distinct: true,
-                limit: Number(limit),
-                offset: offset,
-                order: [['updatedAt', 'DESC']]
-            });
-
-            // Reordenar followups en memoria para que el 0 sea siempre el más reciente
-            rows.forEach((p: any) => {
-                if (p.followups && p.followups.length > 0) {
-                    p.followups.sort((a: any, b: any) => new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime());
-                }
-            });
-
-            // D. Estadístics
-            const stats = {
-                total: await Patient.count(),
-                pendientes: await FollowUp.count({ where: { status: 'PENDIENTE' } }),
-                realizados: await FollowUp.count({ where: { status: 'REALIZADO' } }),
-                agendados: await FollowUp.count({ where: { status: 'AGENDADO' } }),
-                topProcedures: await FollowUp.findAll({
+        // 🚀 MEJORA 1: SI SOLO SE PIDEN ESTADÍSTICAS (KPIs y Gráficas)
+        // Esto evita que las consultas pesadas se ejecuten en cada cambio de página.
+        if (onlyStats === 'true') {
+            const [total, pendientes, realizados, agendados, topProcedures] = await Promise.all([
+                Patient.count(),
+                FollowUp.count({ where: { status: 'PENDIENTE' } }),
+                FollowUp.count({ where: { status: 'REALIZADO' } }),
+                FollowUp.count({ where: { status: 'AGENDADO' } }),
+                FollowUp.findAll({
                     attributes: [
                         ['category', 'name'],
                         [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
@@ -151,30 +76,107 @@ export class PatientController {
                     order: [[sequelize.literal('cantidad'), 'DESC']],
                     limit: 7
                 })
-            };
+            ]);
 
-            res.json({
+            return res.json({
                 success: true,
-                data: rows,
-                pagination: {
-                    total: count,
-                    totalPages: Math.ceil(count / Number(limit)),
-                    currentPage: Number(page)
-                },
-                stats
+                stats: { total, pendientes, realizados, agendados, topProcedures }
             });
-
-        } catch (error: any) {
-            console.error("❌ Error GET Patients:", error); 
-            res.status(500).json({ success: false, error: 'Error al consultar base de datos.' });
         }
+
+        // --- LÓGICA DE FILTRADO PARA LA TABLA ---
+        const offset = (Number(page) - 1) * Number(limit);
+        const patientWhere: any = {};
+
+        if (eps && eps !== 'TODAS') {
+            patientWhere.insurance = { [Op.like]: `%${eps}%` };
+        }
+
+        if (search) {
+            patientWhere[Op.or] = [
+                { documentNumber: { [Op.like]: `%${search}%` } },
+                { firstName: { [Op.like]: `%${search}%` } },
+                { lastName: { [Op.like]: `%${search}%` } }
+            ];
+        }
+
+        const followUpWhere: any = {};
+        let hasFollowUpFilters = false; 
+
+        if (status && status !== 'TODOS') {
+            followUpWhere.status = status;
+            hasFollowUpFilters = true;
+        }
+
+        if (startDate && endDate) {
+            followUpWhere.dateRequest = {
+                [Op.between]: [new Date(startDate as string), new Date(endDate as string)]
+            };
+            hasFollowUpFilters = true;
+        }
+
+        if (cohorte) {
+            const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
+            if (filtrosList.length > 0) {
+                followUpWhere[Op.or] = filtrosList.map(filtro => ({
+                    [Op.or]: [
+                        { category: { [Op.like]: `%${filtro}%` } },
+                        { observation: { [Op.like]: `%${filtro}%` } }
+                    ]
+                }));
+                hasFollowUpFilters = true;
+            }
+        }
+
+        // 🚀 MEJORA 2: CONSULTA DE DATOS LIGERA
+        // Usamos include optimizado y limitamos la respuesta.
+        const { count, rows } = await Patient.findAndCountAll({
+            where: patientWhere,
+            include: [{
+                model: FollowUp,
+                as: 'followups',
+                // Si tocas una pestaña, se vuelve obligatorio filtrar. 
+                // Si estás en "TODOS", trae a todos los pacientes.
+                required: hasFollowUpFilters, 
+                where: hasFollowUpFilters ? followUpWhere : undefined,
+            }],
+            distinct: true,
+            limit: Number(limit),
+            offset: offset,
+            order: [['updatedAt', 'DESC']]
+        });
+
+        // Reordenar seguimientos en memoria (solo los que vienen en la página)
+        rows.forEach((p: any) => {
+            if (p.followups && p.followups.length > 0) {
+                p.followups.sort((a: any, b: any) => 
+                    new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime()
+                );
+            }
+        });
+
+        res.json({
+            success: true,
+            data: rows,
+            pagination: {
+                total: count,
+                totalPages: Math.ceil(count / Number(limit)),
+                currentPage: Number(page)
+            }
+        });
+
+    } catch (error: any) {
+        console.error("❌ Error GET Patients:", error); 
+        res.status(500).json({ success: false, error: 'Error al consultar base de datos.' });
     }
+}
 
     // 3. GESTIÓN MASIVA 
     static bulkUpdate = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             const { ids, status, observation } = req.body;
+            const operatorId = req.user?.id;
 
             if (!ids || !Array.isArray(ids) || ids.length === 0) {
                 await t.rollback();
@@ -190,6 +192,18 @@ export class PatientController {
             }));
 
             await FollowUp.bulkCreate(newFollowUps, { transaction: t });
+
+            // 🕵️‍♂️ AUDITORÍA: Actualización Masiva
+            if (operatorId) {
+                await AuditLog.create({
+                    userId: operatorId,
+                    action: 'BULK_UPDATE',
+                    tableName: 'FollowUps',
+                    recordId: `[${ids.join(',')}]`,
+                    oldValues: null,
+                    newValues: { status, observation }
+                }, { transaction: t });
+            }
 
             await t.commit();
             res.json({ success: true, message: "Registros actualizados." });
@@ -233,6 +247,8 @@ export class PatientController {
 
     static bulkUpdateCups = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
+        const operatorId = req.user?.id;
+
         try {
             const { ids, grupo } = req.body;
             if (!ids || !Array.isArray(ids) || !grupo) {
@@ -253,6 +269,14 @@ export class PatientController {
                     { category: grupo },
                     { where: { cups: { [Op.in]: cupsCodes } }, transaction: t }
                 );
+
+                // 🕵️‍♂️ AUDITORÍA: Cambios en el maestro de CUPS
+                if (operatorId) {
+                    await AuditLog.create({
+                        userId: operatorId, action: 'UPDATE_CUPS', tableName: 'FollowUps',
+                        recordId: `[${cupsCodes.join(',')}]`, oldValues: null, newValues: { category: grupo }
+                    }, { transaction: t });
+                }
             }
 
             await t.commit();
@@ -270,60 +294,132 @@ export class PatientController {
 
     // 5. DETALLES Y CRUD
     static getPatientById = async (req: Request, res: Response) => {
-        try {
-            const id = String(req.params.id);
-            const patient = await Patient.findByPk(id, {
-                include: [{ model: FollowUp, as: 'followups' }],
-                order: [[{ model: FollowUp, as: 'followups' }, 'dateRequest', 'DESC']]
-            });
-            if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
-            res.json({ success: true, data: patient }); 
-        } catch (error) {
-            res.status(500).json({ success: false });
-        }
+    try {
+        const id = String(req.params.id);
+        
+        // 1. Buscamos el paciente con sus seguimientos
+        const patient = await Patient.findByPk(id, {
+            include: [{ model: FollowUp, as: 'followups' }],
+            order: [[{ model: FollowUp, as: 'followups' }, 'dateRequest', 'DESC']]
+        });
+
+        if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
+
+        // 2. 🕵️ Buscamos los logs manualmente forzando el ID a String
+        const history = await AuditLog.findAll({
+            where: {
+                tableName: 'Patients',
+                recordId: id // Aquí 'id' ya es un String, así que Postgres no fallará
+            },
+            limit: 10,
+            order: [['createdAt', 'DESC']],
+            include: [{ model: User, attributes: ['name'] }]
+        });
+
+        // 3. Enviamos todo junto
+        res.json({ 
+            success: true, 
+            data: {
+                ...patient.toJSON(),
+                auditLogs: history // El frontend recibirá los logs aquí
+            } 
+        }); 
+
+    } catch (error) {
+        console.error("❌ Error en detalle de paciente:", error);
+        res.status(500).json({ success: false });
     }
+}
 
     static createPatient = async (req: Request, res: Response) => {
         try {
+            const operatorId = req.user?.id;
             const exists = await Patient.findOne({ where: { documentNumber: req.body.documentNumber } });
             if (exists) return res.status(400).json({ success: false, error: 'Ya existe.' });
+            
             const newPatient = await Patient.create(req.body);
+
+            // 🕵️‍♂️ AUDITORÍA: Creación Manual
+            if (operatorId) {
+                await AuditLog.create({
+                    userId: operatorId, action: 'CREATE', tableName: 'Patients',
+                    recordId: String(newPatient.id), oldValues: null, newValues: newPatient.toJSON()
+                });
+            }
+
             res.status(201).json({ success: true, data: newPatient });
         } catch (error) {
             res.status(500).json({ success: false });
         }
     }
 
-    // 6. ACTUALIZAR PACIENTE
+    // 6. ACTUALIZAR PACIENTE CON TRAZABILIDAD DINÁMICA
     static updatePatient = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
+        const operatorId = req.user?.id; // Extraído del middleware de autenticación
+
         try {
             const id = String(req.params.id); 
             const data = req.body;
 
+            // 1. Buscar paciente actual
             const patient = await Patient.findByPk(id);
             
             if (!patient) {
                 await t.rollback();
-                return res.status(404).json({ success: false, message: "Paciente no encontrado en BD." });
+                return res.status(404).json({ 
+                    success: false, 
+                    message: "Paciente no encontrado en la base de datos." 
+                });
             }
 
+            // 2. 🕵️‍♂️ Capturar estado anterior
+            const oldData = patient.toJSON();
+
+            // 3. Ejecutar actualización
             await patient.update(data, { transaction: t });
+
+            // 4. 🕵️‍♂️ DETERMINAR CAMBIOS REALES (Opcional pero recomendado)
+            // Filtramos 'data' para guardar solo lo que el usuario intentó cambiar
+            const changesDetected = Object.keys(data).reduce((acc: any, key) => {
+                if (data[key] !== oldData[key]) {
+                    acc[key] = data[key];
+                }
+                return acc;
+            }, {});
+
+            // 5. 🛡️ REGISTRO DE AUDITORÍA
+            // Solo creamos el log si hay un operador identificado y hubo cambios
+            if (operatorId && Object.keys(changesDetected).length > 0) {
+                await AuditLog.create({
+                    userId: operatorId,
+                    action: 'UPDATE',
+                    tableName: 'Patients',
+                    recordId: id,
+                    oldValues: oldData,      // El objeto completo original
+                    newValues: changesDetected, // Solo los campos que cambiaron
+                    ipAddress: req.ip || req.socket.remoteAddress // Rastro de red
+                }, { transaction: t });
+            }
 
             await t.commit();
 
+            // 6. LOG DE CONSOLA PARA DESARROLLO
+            console.log(`✅ Auditoría: Paciente ${id} actualizado por Usuario ${operatorId}`);
+
             return res.json({ 
                 success: true, 
-                message: "Paciente actualizado correctamente.",
+                message: "Paciente actualizado y rastro de auditoría generado.",
                 data: patient 
             });
 
         } catch (error: any) {
+            // 🚨 Si algo falla, revertimos TODO (Paciente y Log)
             await t.rollback();
-            console.error("Error actualizando paciente:", error);
+            console.error("❌ Error Crítico en updatePatient:", error);
             return res.status(500).json({ 
                 success: false, 
-                message: "Error interno al actualizar.",
+                message: "Error interno al procesar la actualización.",
                 error: error.message 
             });
         }
@@ -333,29 +429,37 @@ export class PatientController {
     static deletePatient = async (req: Request, res: Response) => {
         try {
             const id = String(req.params.id);
-            await Patient.destroy({ where: { id: id } }); 
+            const operatorId = req.user?.id;
+            const patient = await Patient.findByPk(id);
+
+            if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
+
+            const oldData = patient.toJSON(); // 🕵️‍♂️ Rescatamos datos antes de destruir
+            await patient.destroy(); 
+
+            // 🕵️‍♂️ AUDITORÍA: Eliminación (Crítico)
+            if (operatorId) {
+                await AuditLog.create({
+                    userId: operatorId, action: 'DELETE', tableName: 'Patients',
+                    recordId: id, oldValues: oldData, newValues: null
+                });
+            }
+
             res.json({ success: true, message: 'Eliminado' });
         } catch (error) {
             res.status(500).json({ success: false });
         }
     }
 
-    // 8. AUDITORÍA BLINDADA
+    // 8. AUDITORÍA BLINDADA (Lectura de DB, no crea Logs)
     static getAuditStats = async (req: Request, res: Response) => {
-        
         const response = {
             stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
             duplicates: [] as any[]
         };
 
         try {
-            console.log("🔍 [AUDIT] Iniciando diagnóstico...");
-
-            const [totalRecords, totalPatients] = await Promise.all([
-                FollowUp.count(),
-                Patient.count()
-            ]);
-
+            const [totalRecords, totalPatients] = await Promise.all([ FollowUp.count(), Patient.count() ]);
             const sinEps = await Patient.count({ where: { [Op.or]: [{ insurance: null }, { insurance: '' }] } });
             const sinCups = await FollowUp.count({ where: { [Op.or]: [{ cups: null }, { cups: '' }] } });
             const fechasMalas = await FollowUp.count({
@@ -405,7 +509,6 @@ export class PatientController {
                         });
                     }
                 }
-
             } catch (dupError: any) {
                 console.warn("⚠️ [AUDIT WARNING] Falló SQL de duplicados:", dupError.original?.message || dupError.message);
                 response.duplicates = []; 
@@ -422,6 +525,8 @@ export class PatientController {
     // 9. HERRAMIENTA: ELIMINAR DUPLICADOS
     static cleanDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
+        const operatorId = req.user?.id;
+
         try {
             console.log("🧹 [CLEAN] Iniciando limpieza de duplicados...");
 
@@ -436,12 +541,19 @@ export class PatientController {
 
             await sequelize.query(cleanQuery, { transaction: t });
             
+            // 🕵️‍♂️ AUDITORÍA: Limpieza de Base de Datos
+            if (operatorId) {
+                await AuditLog.create({
+                    userId: operatorId, action: 'CLEAN_DUPLICATES', tableName: 'FollowUps',
+                    recordId: 'MULTIPLE', oldValues: null, newValues: null
+                }, { transaction: t });
+            }
+
             await t.commit();
             res.json({ success: true, message: "Limpieza de duplicados completada." });
 
         } catch (error) {
             await t.rollback();
-            console.error("❌ Error limpiando duplicados:", error);
             res.status(500).json({ success: false, error: "Error al limpiar duplicados." });
         }
     }

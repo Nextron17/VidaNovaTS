@@ -1,8 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
-import helmet from 'helmet'; // 🛡️ NUEVO: Seguridad de cabeceras HTTP
-import rateLimit from 'express-rate-limit'; // 🛡️ NUEVO: Límite de peticiones
 import { createServer } from 'http';
 
 // IMPORTACIÓN DE RUTAS
@@ -12,56 +10,27 @@ import navegacionRoutes from './modules/navegacion/routes/navegacionRoutes';
 
 const app = express();
 
-// 🛡️ 1. SEGURIDAD BÁSICA (Debe ir primero)
-// Helmet bloquea cabeceras que revelan información y previene ataques XSS/Clickjacking
-app.use(helmet());
-app.disable('x-powered-by'); // Oculta que usamos Express
+// 🔓 1. CONFIGURACIÓN ABIERTA
+app.disable('x-powered-by'); 
 
-// Configuración del limitador de peticiones (Anti-DDoS y fuerza bruta básica)
-const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 300, // Límite de 300 peticiones por IP en ese tiempo
-    message: {
-        success: false,
-        error: 'Hemos detectado tráfico inusual desde tu red. Intenta de nuevo en 15 minutos.'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-// Aplicamos el límite SOLO a las rutas de la API (no afecta a recursos estáticos si los tuvieras)
-app.use('/api', globalLimiter);
-
-
-// ⚙️ 2. CONFIGURACIÓN DE CORS DINÁMICO
-const allowedOrigins = [
-    process.env.FRONTEND_URL, 
-    'http://localhost:3000',
-    'http://localhost:5173'
-];
-
+// ⚙️ 2. CORS TOTALMENTE ABIERTO (Para evitar bloqueos en desarrollo/pruebas)
+// ⚙️ 2. CORS DINÁMICO TOTALMENTE ABIERTO (Legal para el navegador)
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-            callback(null, true);
-        } else {
-            callback(new Error('Bloqueado por políticas de seguridad (CORS)'));
-        }
+        // Al devolver 'true', aceptamos cualquier origen dinámicamente
+        callback(null, true); 
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'] // 🛡️ Restringimos cabeceras permitidas
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'] 
 }));
 
-
-// 📦 3. PARSERS Y LOGS
+// 📦 3. PARSERS SIN LÍMITES (O con límites masivos para archivos gigantes)
 app.use(morgan('dev'));
 
-// LÍMITES DE CARGA
-// Nota: Para subida de Excel (multipart/form-data) se encarga Multer. 
-// Estos límites son para JSON puro y datos de formularios codificados.
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Eliminamos las restricciones de tamaño para que pasen Excels de miles de filas
+app.use(express.json({ limit: '500mb' })); 
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 
 // 🚀 4. RUTAS DE LA API
@@ -69,19 +38,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/navegacion', navegacionRoutes); 
 
-// Ruta de salud del sistema (Health Check para Docker/Render)
+// Ruta de salud
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        server: 'VidaNova Backend - Security Mode', 
-        database: 'Connected',
+        mode: 'Unrestricted / Massive Data Ready',
         timestamp: new Date().toISOString() 
     });
 });
 
 
-// 🚨 5. MANEJO DE ERRORES (404 y Globales)
-// 404 - Ruta no encontrada
+// 🚨 5. MANEJO DE ERRORES
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -89,26 +56,23 @@ app.use((req, res) => {
     });
 });
 
-// 500 - Manejador Global de Errores
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || 500;
-    const message = err.message || 'Error interno del servidor';
     
-    // Interceptar errores de Sequelize (Base de datos) para no filtrar info delicada
-    if (err.name === 'SequelizeDatabaseError' || err.name === 'SequelizeValidationError') {
-        return res.status(400).json({
-            success: false,
-            error: 'Error de validación o estructura en la Base de Datos',
-            detail: process.env.NODE_ENV === 'development' ? err.message : 'Error interno' // Ocultamos detalles en producción
-        });
-    }
+    // En este modo, mostramos TODO el error para poder debuguear por qué fallan los miles de datos
+    console.error("❌ ERROR DETECTADO:", err);
 
     res.status(status).json({
         success: false,
-        error: message,
-        code: err.code || 'SERVER_ERROR'
+        error: err.message || 'Error interno del servidor',
+        stack: err.stack, // Mostramos el stack para saber exactamente dónde falló el Excel
+        detail: err.parent?.detail || err.original?.detail || err.message
     });
 });
 
 const server = createServer(app);
+
+// 🚀 IMPORTANTE: Quitar el timeout del servidor para que no se corte la subida masiva
+server.timeout = 0; // 0 significa infinito (esperará hasta que el Excel termine)
+
 export { app, server };

@@ -15,7 +15,7 @@ import api from "@/src/app/services/api";
 // --- UTILIDAD 1: Abreviatura de Documento ---
 const getDocType = (type: string) => {
   if (!type) return 'CC'; 
-  const t = type.toUpperCase().trim();
+  const t = String(type).toUpperCase().trim();
   if (t.includes('CIUDADANIA') || t === 'CC') return 'CC';
   if (t.includes('EXTRANJERIA') || t === 'CE') return 'CE';
   if (t.includes('IDENTIDAD') || t === 'TI') return 'TI';
@@ -25,28 +25,40 @@ const getDocType = (type: string) => {
   return t.length > 4 ? 'DOC' : t; 
 };
 
-// --- UTILIDAD 2: Parsear la Observación "Rica" ---
-// Extrae metadatos usando Regex para ser más flexible con formatos sucios
+// --- UTILIDAD 2: Formateo Seguro de Fechas (Anti-Crash) ---
+const formatSafeDate = (dateString: any) => {
+    if (!dateString) return 'Sin Fecha';
+    try {
+        const d = new Date(dateString);
+        // Si el resultado de new Date() es un "Invalid Date"
+        if (isNaN(d.getTime())) return 'Fecha Inválida';
+        // Ajustamos la zona horaria para que no se atrase un día
+        const adjustedDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+        return adjustedDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch (error) {
+        return 'Formato Desconocido';
+    }
+};
+
+// --- UTILIDAD 3: Parsear la Observación "Rica" ---
 const parseMetadata = (fullObs: string) => {
     if (!fullObs) return { text: '', meta: {} as any };
     
-    // 1. Extraer la nota limpia (todo lo que está antes del primer pipe | o tag conocido)
-    const cleanTextMatch = fullObs.match(/^([^|]+)/);
+    // 1. Extraer la nota limpia
+    const cleanTextMatch = String(fullObs).match(/^([^|]+)/);
     const text = cleanTextMatch ? cleanTextMatch[1].trim() : '';
 
-    // 2. Extraer metadatos usando Regex global
+    // 2. Extraer metadatos
     const meta: any = {};
-    
-    // Función helper para extraer valor de un tag
     const extract = (tag: string) => {
         const regex = new RegExp(`(?:\\||\\n)\\s*${tag}:\\s*([^|\\n]+)`, 'i');
-        const match = fullObs.match(regex);
+        const match = String(fullObs).match(regex);
         return match ? match[1].trim() : null;
     };
 
     meta.PROF = extract('PROF');
     meta.LUGAR = extract('LUGAR');
-    meta.RESP = extract('RESP');
+    meta.RESP = extract('RESP') || extract('GESTOR');
     meta.BARRERA = extract('BARRERA');
     meta.DX = extract('DX') || extract('DX SUGERIDO');
     meta['F.NOTA'] = extract('F.NOTA');
@@ -67,16 +79,20 @@ function ProfileContent() {
       try {
         const res = await api.get(`/navegacion/patients/${id}`);
         if (res.data.success) {
-            // Ordenar historial por fecha descendente (más reciente primero)
             const sortedData = res.data.data;
             if (sortedData.followups) {
-                sortedData.followups.sort((a: any, b: any) => new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime());
+                // Ordenar historial (Evitando error si la fecha no es válida)
+                sortedData.followups.sort((a: any, b: any) => {
+                    const timeA = new Date(a.dateRequest || 0).getTime() || 0;
+                    const timeB = new Date(b.dateRequest || 0).getTime() || 0;
+                    return timeB - timeA;
+                });
             }
             setPatient(sortedData);
         }
       } catch (error) {
-        console.error(error);
-        alert("Error cargando paciente");
+        console.error("Error cargando paciente:", error);
+        alert("Error cargando paciente. Puede que no exista.");
         router.push("/navegacion/admin/pacientes");
       } finally {
         setLoading(false);
@@ -86,32 +102,38 @@ function ProfileContent() {
   }, [id, router]);
 
   const handleDelete = async () => {
-    if (!confirm(`⚠️ ¿Eliminar a ${patient.firstName}?\n\nSe borrará todo el historial.`)) return;
+    if (!confirm(`⚠️ ¿Eliminar a ${patient.firstName}?\n\nSe borrará todo el historial clínico. Esta acción no se puede deshacer.`)) return;
     try {
-        await api.delete(`/patients/${id}`);
+        await api.delete(`/navegacion/patients/${id}`);
         router.push("/navegacion/admin/pacientes"); 
     } catch (error) {
-        alert("Error al eliminar.");
+        alert("Error al eliminar el paciente. Comprueba tu conexión.");
     }
   };
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <Loader2 className="animate-spin text-blue-600" size={40}/>
-        <p className="text-slate-400 font-bold">Cargando historia clínica...</p>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Cargando Historia...</p>
     </div>
   );
 
-  if (!patient) return <div className="p-10 text-center">No encontrado.</div>;
+  if (!patient) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <Ban className="text-red-400" size={48}/>
+        <p className="text-slate-800 font-bold text-lg">Paciente no encontrado</p>
+        <button onClick={() => router.push("/navegacion/admin/pacientes")} className="text-blue-600 font-bold underline">Volver al directorio</button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 md:p-10 font-sans text-slate-800 pb-32">
       
       {/* 1. HEADER */}
       <div className="mb-8">
-        <Link href="/navegacion/admin/pacientes" className="inline-flex items-center gap-2 text-slate-400 hover:text-blue-600 transition-colors font-bold text-sm mb-4">
+        <button onClick={() => router.push("/navegacion/admin/pacientes")} className="inline-flex items-center gap-2 text-slate-400 hover:text-blue-600 transition-colors font-bold text-sm mb-4">
             <ArrowLeft size={16}/> Volver al Directorio
-        </Link>
+        </button>
         
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
             <div className="w-full lg:w-auto">
@@ -144,8 +166,8 @@ function ProfileContent() {
                     <FileDown size={16}/> PDF
                 </Link>
                 
-                {/* Botón Nuevo Seguimiento (Envía patientId correctamente) */}
-                <Link href={`/navegacion/admin/gestion/nuevo?patientId=${patient.id}`} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex gap-2 items-center">
+                {/* Botón Nuevo Seguimiento */}
+                <Link href={`/navegacion/admin/gestion/nuevo?patientId=${patient.id}`} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex gap-2 items-center active:scale-95">
                     <Plus size={18}/> Nuevo Seguimiento
                 </Link>
             </div>
@@ -155,7 +177,7 @@ function ProfileContent() {
       {/* 2. TARJETAS INFO */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <InfoCard icon={<ShieldCheck/>} color="blue" label="Aseguradora" value={patient.insurance || 'No registrada'} sub="Régimen Contributivo"/>
-        <InfoCard icon={<MapPin/>} color="orange" label="Ubicación" value={patient.city || 'Desconocida'} sub={patient.department}/>
+        <InfoCard icon={<MapPin/>} color="orange" label="Ubicación" value={patient.city || 'Desconocida'} sub={patient.department || '---'}/>
         <InfoCard icon={<MessageCircle/>} color="green" label="Contacto" value={patient.phone} sub={patient.email || 'Sin email'} isContact/>
       </div>
 
@@ -177,10 +199,11 @@ function ProfileContent() {
                     return (
                         <div key={h.id} className="relative group">
                             {/* Bolita de tiempo */}
-                            <div className={`absolute -left-[41px] top-0 w-5 h-5 rounded-full border-4 bg-white shadow-sm z-10 ${h.status.includes('REALIZADO') ? 'border-emerald-500' : 'border-slate-300'}`} />
+                            <div className={`absolute -left-[41px] top-0 w-5 h-5 rounded-full border-4 bg-white shadow-sm z-10 ${String(h.status).includes('REALIZADO') ? 'border-emerald-500' : 'border-slate-300'}`} />
                             
+                            {/* 🛡️ APLICAMOS LA FUNCIÓN SEGURA AQUÍ */}
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                {h.dateRequest ? new Date(h.dateRequest).toLocaleDateString('es-CO') : 'Sin Fecha'}
+                                {formatSafeDate(h.dateRequest || h.createdAt)}
                             </div>
 
                             <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all relative">
@@ -196,7 +219,7 @@ function ProfileContent() {
                                         </div>
                                     </div>
                                     <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black border uppercase whitespace-nowrap ${getStatusColor(h.status)}`}>
-                                        {h.status.replace('_', ' ')}
+                                        {String(h.status).replace('_', ' ')}
                                     </span>
                                 </div>
 
@@ -204,7 +227,7 @@ function ProfileContent() {
                                 <Link 
                                     href={`/navegacion/admin/gestion?id=${h.id}`} 
                                     className="absolute top-6 right-6 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all" 
-                                    title="Ver Detalle Completo"
+                                    title="Ver o Editar Detalle"
                                 >
                                     <ExternalLink size={20}/>
                                 </Link>
@@ -223,7 +246,7 @@ function ProfileContent() {
                                     )}
                                     {meta.RESP && (
                                         <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                                            <UserCog size={14} className="text-purple-500"/> <span className="truncate">Resp: {meta.RESP}</span>
+                                            <UserCog size={14} className="text-purple-500"/> <span className="truncate">Gestor: {meta.RESP}</span>
                                         </div>
                                     )}
                                     {meta['F.NOTA'] && (
@@ -239,7 +262,7 @@ function ProfileContent() {
                                 </div>
 
                                 {/* ALERTAS (Barreras) */}
-                                {meta.BARRERA && (
+                                {meta.BARRERA && meta.BARRERA.toUpperCase() !== "NINGUNA / SIN BARRERA" && meta.BARRERA.toUpperCase() !== "NO" && (
                                     <div className="mb-4 bg-red-50 border border-red-100 p-3 rounded-xl flex items-start gap-3">
                                         <Ban size={16} className="text-red-500 mt-0.5 shrink-0"/>
                                         <div>
@@ -250,7 +273,7 @@ function ProfileContent() {
                                 )}
 
                                 {/* NOTA LIMPIA (Texto Humano) */}
-                                {text && (
+                                {text && text.toUpperCase() !== "SIN DETALLES DE GESTIÓN." && (
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                                         <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-2">
                                             <FileText size={12}/> Observación Clínica
@@ -275,14 +298,15 @@ function InfoCard({ icon, color, label, value, sub, isContact = false }: any) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const colors: any = { blue: "bg-blue-50 text-blue-600", orange: "bg-orange-50 text-orange-600", green: "bg-emerald-50 text-emerald-600" };
-    const numbers = isContact && value ? value.toString().split(/[\/\-,]+/).map((n: string) => n.trim().replace(/\D/g, '')).filter((n: string) => n.length > 6) : [];
+    const numbers = isContact && value ? String(value).split(/[\/\-,]+/).map((n: string) => n.trim().replace(/\D/g, '')).filter((n: string) => n.length > 6) : [];
+    
     return (
         <div className="bg-white border border-slate-200 rounded-[2rem] p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all relative">
             <div className={`p-4 rounded-2xl ${colors[color]}`}>{React.cloneElement(icon, { size: 24, strokeWidth: 2.5 })}</div>
             <div className="flex-1 min-w-0">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">{label}</span>
-                <div className="text-sm font-bold text-slate-800 truncate mb-1" title={value}>{value}</div>
-                <div className="text-xs text-slate-400 font-medium truncate" title={sub}>{sub}</div>
+                <div className="text-sm font-bold text-slate-800 truncate mb-1" title={String(value)}>{value}</div>
+                <div className="text-xs text-slate-400 font-medium truncate" title={String(sub)}>{sub}</div>
                 {isContact && numbers.length > 0 && (
                     <div className="mt-3 relative" ref={dropdownRef}>
                         <button onClick={() => setIsOpen(!isOpen)} className="w-full py-2 bg-emerald-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200">WhatsApp <ChevronDown size={14}/></button>
@@ -295,7 +319,7 @@ function InfoCard({ icon, color, label, value, sub, isContact = false }: any) {
 }
 
 function getStatusColor(status: string) {
-    const s = (status || '').toUpperCase();
+    const s = String(status || '').toUpperCase();
     if (s.includes('REALIZADO') || s.includes('FINALIZA')) return "bg-emerald-50 text-emerald-700 border-emerald-100";
     if (s.includes('CANCEL') || s.includes('NO ASISTE')) return "bg-red-50 text-red-700 border-red-100";
     if (s.includes('AGENDADO')) return "bg-blue-50 text-blue-700 border-blue-100";
@@ -304,7 +328,7 @@ function getStatusColor(status: string) {
 
 export default function Page() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={40}/></div>}>
             <ProfileContent />
         </Suspense>
     );

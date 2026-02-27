@@ -1,6 +1,7 @@
 import { Table, Column, Model, DataType, HasMany, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { FollowUp } from './FollowUp'; 
 import { User } from '../../usuarios/models/User';
+import { AuditLog } from '../../../core/models/AuditLog'; // 👈 Asegúrate de que la ruta sea la correcta
 
 @Table({
     tableName: 'patients',
@@ -51,7 +52,9 @@ export class Patient extends Model {
     @Column({ type: DataType.STRING, defaultValue: 'DIAGNOSTICO' })
     stage!: string;
 
+    // ==========================================
     // ✅ 5. RELACIONES CON OTRAS TABLAS
+    // ==========================================
     
     // A. ¿Quién es el Navegador/Usuario a cargo de este paciente?
     @ForeignKey(() => User)
@@ -65,8 +68,35 @@ export class Patient extends Model {
     @HasMany(() => FollowUp)
     followups!: FollowUp[];
 
+    // 🕵️ C. HISTORIAL DE AUDITORÍA (Trazabilidad)
+    // Relación para traer los cambios hechos a este paciente específico
+    @HasMany(() => AuditLog, {
+        foreignKey: 'recordId',
+        constraints: false,
+        scope: {
+            tableName: 'Patients' // Filtra para que solo traiga logs de esta tabla
+        }
+    })
+    auditLogs!: AuditLog[];
+
+    // ==========================================
     // 6. UTILIDADES
+    // ==========================================
+    
     get fullName(): string {
         return `${this.firstName} ${this.lastName}`;
+    }
+
+    // Método para obtener la edad actual si existe fecha de nacimiento
+    get currentAge(): number | null {
+        if (!this.birthDate) return null;
+        const today = new Date();
+        const birth = new Date(this.birthDate);
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        return age;
     }
 }

@@ -4,10 +4,53 @@ import { FollowUp } from '../models/FollowUp';
 import { Op } from 'sequelize';
 import { sequelize } from '../../../core/config/db';
 
+// 🕵️ IMPORTAMOS LOS MODELOS NECESARIOS PARA EL RASTRO DE ACTIVIDAD
+import { AuditLog } from '../../../core/models/AuditLog';
+import { User } from '../../usuarios/models/User';
+
 export class AuditController {
 
-        // 1. OBTENER ESTADÍSTICAS (Lectura)
-        static getGeneralStats = async (req: Request, res: Response) => {
+    // ==========================================
+    // 👁️ 1. OBTENER RASTRO DE USUARIOS (Monitor Admin)
+    // ==========================================
+    static getGlobalLogs = async (req: Request, res: Response) => {
+        try {
+            const { month, year, all } = req.query;
+            let whereCondition = {};
+
+            // Si el usuario pide un mes y año específicos
+            if (month && year && all !== 'true') {
+                const startDate = new Date(Number(year), Number(month) - 1, 1);
+                const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59);
+                
+                whereCondition = {
+                    createdAt: {
+                        [Op.between]: [startDate, endDate]
+                    }
+                };
+            }
+
+            const logs = await AuditLog.findAll({
+                where: whereCondition,
+                limit: all === 'true' ? 500 : 100, // Limitamos a 500 si es "todo" por rendimiento
+                order: [['createdAt', 'DESC']],
+                include: [{ 
+                    model: User, 
+                    attributes: ['name', 'role'] 
+                }]
+            });
+
+            return res.json({ success: true, data: logs });
+        } catch (error) {
+            console.error("Error obteniendo auditoría:", error);
+            return res.status(500).json({ success: false, message: "Error al cargar logs." });
+        }
+    }
+
+    // ==========================================
+    // 📊 2. OBTENER ESTADÍSTICAS DE CALIDAD (Lectura)
+    // ==========================================
+    static getGeneralStats = async (req: Request, res: Response) => {
         const response = {
             stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
             duplicates: [] as any[]
@@ -75,13 +118,14 @@ export class AuditController {
 
         } catch (error: any) {
             console.error("❌ [AUDIT FATAL] Error general:", error);
-            // Respuesta de emergencia para no romper el frontend
             res.json({ success: true, ...response });
         }
     }
 
-        // 2. CORREGIR FECHAS 
-        static fixIncoherentDates = async (req: Request, res: Response) => {
+    // ==========================================
+    // 🛠️ 3. CORREGIR FECHAS 
+    // ==========================================
+    static fixIncoherentDates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             const tableName = FollowUp.getTableName();
@@ -106,8 +150,10 @@ export class AuditController {
         }
     }
 
-        // 3. FUSIÓN DE DUPLICADOS 
-        static mergeDuplicates = async (req: Request, res: Response) => {
+    // ==========================================
+    // 🧬 4. FUSIÓN DE DUPLICADOS 
+    // ==========================================
+    static mergeDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             console.log("🧬 [MERGE] Iniciando fusión...");
@@ -180,8 +226,10 @@ export class AuditController {
         }
     }
     
-        // 4. LIMPIEZA DE DUPLICADOS
-        static cleanDuplicates = async (req: Request, res: Response) => {
+    // ==========================================
+    // 🧹 5. LIMPIEZA DE DUPLICADOS
+    // ==========================================
+    static cleanDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             const tableName = FollowUp.getTableName();

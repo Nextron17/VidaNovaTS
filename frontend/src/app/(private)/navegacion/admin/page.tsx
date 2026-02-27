@@ -92,13 +92,20 @@ const getIconByModality = (modality: string) => {
     return <FileText size={12}/>;
 };
 
-// --- HELPER: EXTRAER COHORTE ---
+// --- HELPER CORREGIDO: EXTRAER COHORTE ---
 const extractCohort = (obs: string) => {
-    if (!obs) return "Sin Cohorte";
-    // Busca COHORTE o DX SUGERIDO (Adaptado a tu backend nuevo)
-    const match = obs.match(/(?:COHORTE|DX SUGERIDO):\s*([^|]+)/i);
-    const txt = match ? match[1].trim() : "General";
-    return txt.replace("= CAC", "").replace("=", " "); 
+    if (!obs || typeof obs !== 'string') return "Sin Cohorte";
+    
+    const match = obs.match(/(?:COHORTE|DX SUGERIDO|CAC):\s*([^|]+)/i);
+    if (match) {
+        return match[1].trim().replace("= CAC", "").replace("=", " "); 
+    }
+    
+    if (obs.length > 3) {
+        return obs.substring(0, 20) + (obs.length > 20 ? "..." : "");
+    }
+    
+    return "Sin Cohorte";
 };
 
 // --- COMPONENTE WHATSAPP ---
@@ -159,6 +166,8 @@ export default function AdminDashboardPage() {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
+  // --- FETCH DATA CORREGIDO ---
+  // --- FETCH DATA CON DOBLE LLAMADA (ESTADÍSTICAS + TABLA) ---
   const fetchData = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
@@ -169,52 +178,67 @@ export default function AdminDashboardPage() {
         if (filtros.fechaIni) params.startDate = filtros.fechaIni;
         if (filtros.fechaFin) params.endDate = filtros.fechaFin;
         
-        // Enviamos las modalidades y CACs seleccionados
         if (filtros.cohorte.length > 0) params.cohorte = filtros.cohorte.join(','); 
         
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
 
-        const res = await api.get('/navegacion/patients', { params });
-        const data = res.data;
+        // 🔥 LA MAGIA: Hacemos dos peticiones simultáneas (Tabla y Estadísticas)
+        const [resData, resStats] = await Promise.all([
+            api.get('/navegacion/patients', { params }),
+            api.get('/navegacion/patients', { params: { ...params, onlyStats: 'true' } }) // 👈 Pide las stats reales
+        ]);
 
+        const data = resData.data;
+        const statsData = resStats.data;
+
+        // 1. LLENAR LA TABLA
         if (data.success) {
             const rawData = data.data || [];
+            
             const mappedData = rawData.map((p: any) => {
-                const f = p.followups?.[0] || {}; 
-                const fechaSol = f.dateRequest ? new Date(f.dateRequest) : new Date();
+                const f = (p.followups && p.followups.length > 0) ? p.followups[0] : {}; 
+                
+                // Si no hay fecha en el Excel, usa la fecha de hoy
+                const fechaSolStr = f.dateRequest || p.createdAt || new Date().toISOString();
+                const fechaSol = new Date(fechaSolStr);
                 const hoy = new Date();
                 const dias = Math.ceil(Math.abs(hoy.getTime() - fechaSol.getTime()) / (1000 * 60 * 60 * 24)); 
 
                 return {
                     id: p.id,
-                    paciente: `${p.firstName} ${p.lastName}`.trim(),
-                    doc: p.documentNumber,
+                    paciente: `${p.firstName || ''} ${p.lastName || ''}`.trim() || "PACIENTE SIN NOMBRE",
+                    doc: p.documentNumber || "S.N",
                     eps: p.insurance || "SIN EPS",
-                    tel: p.phone,
+                    tel: p.phone || "---",
                     modalidad: f.category || "PENDIENTE", 
                     cups: f.cups || "N/A",                
                     cohorte: extractCohort(f.observation), 
-                    fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '',
-                    fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : null,
-                    dias: dias,
+                    fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '---',
+                    fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : '---',
+                    dias: isNaN(dias) ? 0 : dias,
                     meta: 15,
                     estado: f.status || "PENDIENTE",
                     obs: f.observation || ""
                 };
             });
 
-            if (data.stats && data.stats.topProcedures) {
-                const validStats = data.stats.topProcedures.filter((item: any) => 
-                    MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
-                );
-                setChartData(validStats.length > 0 ? validStats : data.stats.topProcedures);
-            }
-
             setPatients(mappedData);
             setTotalPages(data.pagination?.totalPages || 1);
-            setStats(data.stats || { total: 0, pendientes: 0, realizados: 0, agendados: 0 }); 
         }
+
+        // 2. LLENAR LOS KPIs Y GRÁFICAS (Los cuadros de arriba que salían en 0)
+        if (statsData.success && statsData.stats) {
+            setStats(statsData.stats); // Esto enciende los contadores
+            
+            if (statsData.stats.topProcedures) {
+                const validStats = statsData.stats.topProcedures.filter((item: any) => 
+                    MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
+                );
+                setChartData(validStats.length > 0 ? validStats : statsData.stats.topProcedures);
+            }
+        }
+
     } catch (error: any) {
         console.error("❌ Error API:", error);
         setErrorMsg(error.response?.status === 401 ? "Sesión expirada." : "Error al conectar con el servidor.");
@@ -413,7 +437,7 @@ export default function AdminDashboardPage() {
 
           <div className="md:col-span-12 lg:col-span-4 flex justify-end gap-3 pt-2">
             <button 
-              type="button" // 🔥 AQUÍ ESTÁ EL ARREGLO: type="button"
+              type="button" 
               onClick={() => {
                 setBusqueda(''); 
                 setFiltros({ eps: "TODAS", cohorte: [], fechaIni: "", fechaFin: "", estado: "TODOS" });
@@ -423,7 +447,7 @@ export default function AdminDashboardPage() {
               <X size={16}/> Limpiar
             </button>
             <button 
-                type="button" // 🔥 AQUÍ ESTÁ EL ARREGLO: type="button"
+                type="button" 
                 onClick={fetchData} 
                 className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
             >
@@ -509,7 +533,7 @@ export default function AdminDashboardPage() {
                         <Search size={32} className="text-slate-300"/>
                     </div>
                     <p className="text-slate-500 font-medium">No se encontraron registros.</p>
-                    <p className="text-slate-400 text-xs mt-1">Intenta ajustar los filtros de búsqueda.</p>
+                    <p className="text-slate-400 text-xs mt-1">Intenta ajustar los filtros de búsqueda o cambia la pestaña a "Todos".</p>
                 </div>
             )}
 
@@ -557,12 +581,12 @@ export default function AdminDashboardPage() {
                             </td>
                             <td className="px-4 py-4 text-center">
                                 <div className="flex flex-col items-center gap-1">
-                                    {row.fecha_sol && (
+                                    {row.fecha_sol !== '---' && (
                                         <div className="flex items-center gap-1 text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
                                             <Clock4 size={10}/> {row.fecha_sol}
                                         </div>
                                     )}
-                                    <span className="text-[10px] text-slate-400 font-mono">{row.fecha_cita || '--/--/--'}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">{row.fecha_cita !== '---' ? row.fecha_cita : '--/--/--'}</span>
                                 </div>
                             </td>
                             <td className="px-4 py-4 text-center">

@@ -55,10 +55,11 @@ const getIconByModality = (modality: string) => {
 };
 
 const extractCohort = (obs: string) => {
-    if (!obs) return "General";
-    const match = obs.match(/(?:COHORTE|DX SUGERIDO):\s*([^|]+)/i);
-    const txt = match ? match[1].trim() : "General";
-    return txt.replace("= CAC", "").replace("=", " "); 
+    if (!obs || typeof obs !== 'string') return "Sin Cohorte";
+    const match = obs.match(/(?:COHORTE|DX SUGERIDO|CAC):\s*([^|]+)/i);
+    if (match) return match[1].trim().replace("= CAC", "").replace("=", " "); 
+    if (obs.length > 3) return obs.substring(0, 20) + (obs.length > 20 ? "..." : "");
+    return "Sin Cohorte";
 };
 
 const WhatsAppActions = ({ tel }: { tel: string, nombre: string }) => {
@@ -123,37 +124,63 @@ export default function AtencionDashboardPage() {
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
 
-        const res = await api.get('/navegacion/patients', { params });
-        if (res.data.success) {
-            const mappedData = (res.data.data || []).map((p: any) => {
-                const f = p.followups?.[0] || {}; 
-                const fechaSol = f.dateRequest ? new Date(f.dateRequest) : new Date();
+        // 🔥 DOBLE PETICIÓN PARA ACTIVAR KPIs Y TABLA SIMULTÁNEAMENTE
+        const [resData, resStats] = await Promise.all([
+            api.get('/navegacion/patients', { params }),
+            api.get('/navegacion/patients', { params: { ...params, onlyStats: 'true' } }) 
+        ]);
+
+        const data = resData.data;
+        const statsData = resStats.data;
+
+        // 1. LLENAR LA TABLA (Mapeo Seguro)
+        if (data.success) {
+            const rawData = data.data || [];
+            
+            const mappedData = rawData.map((p: any) => {
+                const f = (p.followups && p.followups.length > 0) ? p.followups[0] : {}; 
+                
+                const fechaSolStr = f.dateRequest || p.createdAt || new Date().toISOString();
+                const fechaSol = new Date(fechaSolStr);
                 const hoy = new Date();
                 const dias = Math.ceil(Math.abs(hoy.getTime() - fechaSol.getTime()) / (1000 * 60 * 60 * 24)); 
+
                 return {
                     id: p.id,
-                    paciente: `${p.firstName} ${p.lastName}`.trim(),
-                    doc: p.documentNumber,
+                    paciente: `${p.firstName || ''} ${p.lastName || ''}`.trim() || "PACIENTE SIN NOMBRE",
+                    doc: p.documentNumber || "S.N",
                     eps: p.insurance || "SIN EPS",
-                    tel: p.phone,
+                    tel: p.phone || "---",
                     modalidad: f.category || "PENDIENTE", 
                     cups: f.cups || "N/A",                
                     cohorte: extractCohort(f.observation), 
-                    fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '',
-                    fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : null,
-                    dias: dias,
+                    fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '---',
+                    fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : '---',
+                    dias: isNaN(dias) ? 0 : dias,
                     meta: 15,
                     estado: f.status || "PENDIENTE",
                     obs: f.observation || ""
                 };
             });
+            
             setPatients(mappedData);
-            setTotalPages(res.data.pagination?.totalPages || 1);
-            setStats(res.data.stats || { total: 0, pendientes: 0, realizados: 0, agendados: 0 });
-            if (res.data.stats?.topProcedures) setChartData(res.data.stats.topProcedures);
+            setTotalPages(data.pagination?.totalPages || 1);
         }
+
+        // 2. LLENAR KPIs Y GRÁFICAS (Enciende los cuadros superiores)
+        if (statsData.success && statsData.stats) {
+            setStats(statsData.stats);
+            
+            if (statsData.stats.topProcedures) {
+                const validStats = statsData.stats.topProcedures.filter((item: any) => 
+                    MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
+                );
+                setChartData(validStats.length > 0 ? validStats : statsData.stats.topProcedures);
+            }
+        }
+
     } catch (error: any) {
-        console.error("Error fetching data");
+        console.error("❌ Error fetching data en Panel de Atención", error);
     } finally {
         setLoading(false);
     }
