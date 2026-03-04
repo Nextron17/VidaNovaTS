@@ -1,10 +1,12 @@
 import axios from 'axios';
 
-// ✅ Forzamos el puerto 4000 que es el que configuramos en el Backend
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api`;const api = axios.create({
+// ✅ Apuntamos a la URL de producción en Render (con process.env o fallback directo)
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'https://vidanovadocker.onrender.com'}/api`;
+
+const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 0, // 60 segundos para procesos pesados de auditoría
+  timeout: 0, // Sin límite de tiempo (o ajústalo si es necesario) para procesos pesados
 });
 
 // --- INTERCEPTOR DE REQUEST (Enviar Token) ---
@@ -45,7 +47,7 @@ api.interceptors.response.use(
         return Promise.resolve({
             data: {
                 success: false,
-                message: "No se pudo establecer conexión con el servidor (Puerto 4000).",
+                message: "No se pudo establecer conexión con el servidor de producción.",
                 stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
                 duplicates: []
             },

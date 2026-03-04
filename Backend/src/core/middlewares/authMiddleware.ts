@@ -14,7 +14,6 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
     try {
         const authHeader = req.headers.authorization;
 
-        // 1. Validación estricta de cabecera
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             res.status(401).json({ 
                 success: false,
@@ -24,7 +23,6 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
             return;
         }
 
-        // Extracción segura del token (evita strings vacíos si envían "Bearer ")
         const token = authHeader.split(' ')[1]?.trim();
         
         if (!token) {

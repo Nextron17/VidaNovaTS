@@ -14,8 +14,6 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
     const [isAuthorized, setIsAuthorized] = useState(false);
 
     useEffect(() => {
-        // 1. Obtener la información del usuario logueado 
-        // (Ajusta esto dependiendo de cómo guardes los datos de sesión, ej. localStorage, cookies o Zustand)
         const userData = localStorage.getItem('user'); 
 
         if (!userData) {
@@ -27,9 +25,7 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
         try {
             const user = JSON.parse(userData);
 
-            // 2. Verificar si el rol del usuario está en la lista permitida
             if (!allowedRoles.includes(user.role)) {
-                // 3. EXPULSIÓN INTELIGENTE: Si no tiene permiso, lo mandamos a su área correspondiente
                 if (user.role === 'NAVIGATOR') {
                     router.replace('/navegacion/atencion/pacientes');
                 } else if (user.role === 'SUPER_ADMIN' || user.role === 'COORDINATOR_NAVIGATOR' || user.role === 'AUDITOR') {

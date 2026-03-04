@@ -3,7 +3,6 @@ import { Router } from 'express';
 import { authenticateJWT, requireRoles } from '../../../core/middlewares/authMiddleware';
 import { upload } from '../../../core/middlewares/uploadMiddleware';
 
-// Importación de Controladores del Módulo de Navegación
 import { PatientController } from '../controllers/PatientController';
 import { FollowUpController } from '../controllers/FollowUpController';
 import { AlertsController } from '../controllers/AlertsController';
@@ -15,20 +14,16 @@ import { CupsController } from '../controllers/CupsController';
 const router = Router();
 
 
-// 🛡️ SEGURIDAD GLOBAL DEL MÓDULO
 
-// Todas las rutas de navegación requieren que el usuario esté autenticado
 router.use(authenticateJWT);
 
 
-// 🩺 1. GESTIÓN DE PACIENTES
 
 router.get('/patients', PatientController.getPatients);
 router.get('/patients/:id', PatientController.getPatientById);
 router.post('/patients', PatientController.createPatient);
 router.put('/patients/:id', PatientController.updatePatient);
 
-// Eliminación protegida: Solo niveles directivos
 router.delete(
     '/patients/:id', 
     requireRoles(['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR']), 
