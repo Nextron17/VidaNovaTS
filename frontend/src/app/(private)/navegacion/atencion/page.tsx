@@ -145,21 +145,33 @@ export default function AtencionDashboardPage() {
                 const hoy = new Date();
                 const dias = Math.ceil(Math.abs(hoy.getTime() - fechaSol.getTime()) / (1000 * 60 * 60 * 24)); 
 
+                // 🚀 EXTRAEMOS LA NOTA LIMPIA SIN DIAGNÓSTICOS PARA LA TABLA
+                const obsLimpia = (f.observation || "").split('|')[0].trim();
+                
+                // 🚀 LIMPIAMOS LA MODALIDAD PARA QUE NO MUESTRE "16= Otros tumores"
+                let modalidadLimpia = f.category || "PENDIENTE";
+                if (modalidadLimpia.includes("=") || modalidadLimpia.includes("CAC")) {
+                    modalidadLimpia = "ONCOLOGÍA"; 
+                }
+
                 return {
                     id: p.id,
                     paciente: `${p.firstName || ''} ${p.lastName || ''}`.trim() || "PACIENTE SIN NOMBRE",
                     doc: p.documentNumber || "S.N",
                     eps: p.insurance || "SIN EPS",
                     tel: p.phone || "---",
-                    modalidad: f.category || "PENDIENTE", 
-                    cups: f.cups || "N/A",                
+                    
+                    // Datos Limpios
+                    modalidad: modalidadLimpia,
+                    cups: f.cups || "---",                
+                    obs: obsLimpia || "-",
+                    
                     cohorte: extractCohort(f.observation), 
                     fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '---',
                     fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : '---',
                     dias: isNaN(dias) ? 0 : dias,
                     meta: 15,
-                    estado: f.status || "PENDIENTE",
-                    obs: f.observation || ""
+                    estado: f.status || "PENDIENTE"
                 };
             });
             
@@ -358,10 +370,13 @@ export default function AtencionDashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm font-medium">
                     {patients.map((row) => (
-                        <tr key={row.id} className={`group transition-all duration-150 ${getRowStyle(row.estado, row.dias, row.meta)}`}>
+                        <tr key={row.id} className={`transition-all duration-150 ${getRowStyle(row.estado, row.dias, row.meta)}`}>
+                            {/* Checkbox */}
                             <td className="px-6 py-4 text-center">
                                 <input type="checkbox" checked={seleccionados.includes(row.id)} onChange={() => toggleSeleccion(row.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"/>
                             </td>
+                            
+                            {/* Paciente y Documento */}
                             <td className="px-4 py-4">
                                 <div className="font-black text-slate-800 text-sm group-hover:text-blue-700 transition-colors uppercase">{row.paciente}</div>
                                 <div className="flex items-center gap-2 mt-1">
@@ -369,33 +384,45 @@ export default function AtencionDashboardPage() {
                                     <WhatsAppActions tel={row.tel} nombre={row.paciente} />
                                 </div>
                             </td>
+                            
+                            {/* 🚀 TRÁMITE Y COHORTE (Limpiado al estilo Django) */}
                             <td className="px-4 py-4">
-                                <div className="flex flex-col gap-1">
-                                    <div className="font-bold text-slate-700 text-[11px] uppercase tracking-tight flex items-center gap-1.5">
-                                        {getIconByModality(row.modalidad)} {row.modalidad}
-                                    </div>
-                                    <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded-md w-fit">{row.cohorte}</span>
+                                <div className="font-bold text-slate-700 text-xs uppercase tracking-tight">
+                                    {row.modalidad.includes('=') || row.modalidad.includes('CAC') ? 'ONCOLOGÍA' : row.modalidad}
                                 </div>
+                                {row.cups !== "---" && row.cups !== "SIN CUPS" && row.cups !== "N/A" && (
+                                    <div className="text-[11px] text-blue-600 font-mono font-bold mt-0.5">
+                                        {row.cups}
+                                    </div>
+                                )}
                             </td>
+                            
+                            {/* Solicitud (Fechas) */}
                             <td className="px-4 py-4 text-center">
                                 <div className="flex flex-col items-center gap-1">
                                     {row.fecha_sol && <div className="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{row.fecha_sol}</div>}
-                                    <span className="text-[9px] text-slate-400 font-mono italic">{row.fecha_cita ? `Cita: ${row.fecha_cita}` : 'Sin agenda'}</span>
+                                    <span className="text-[9px] text-slate-400 font-mono italic">{row.fecha_cita !== '---' ? `Cita: ${row.fecha_cita}` : 'Sin agenda'}</span>
                                 </div>
                             </td>
+                            
+                            {/* Estado */}
                             <td className="px-4 py-4 text-center">
                                 <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-wider ${getBadgeStyle(row.estado)}`}>
                                     {row.estado.replace('_', ' ')}
                                 </span>
                             </td>
+                            
+                            {/* Días */}
                             <td className="px-4 py-4 text-center">
                                 <div className="flex flex-col items-center">
                                     <span className={`text-[11px] font-black px-2 py-0.5 rounded ${row.dias > row.meta ? 'text-rose-600 bg-rose-50' : 'text-slate-600 bg-slate-100'}`}>{row.dias} d</span>
                                 </div>
                             </td>
+                            
+                            {/* Acciones */}
                             <td className="px-6 py-4 text-right">
                                 <div className="flex justify-end gap-2">
-                                    <Link href={`/navegacion/atencion/pacientes/perfil?id=${row.id}`} className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100"><Eye size={16}/></Link>
+                                    <Link href={`/navegacion/atencion/pacientes/perfil?id=${row.patientId}`} className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100"><Eye size={16}/></Link>
                                     <Link href={`/navegacion/atencion/gestion?id=${row.id}`} className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all border border-transparent hover:border-emerald-100"><Edit size={16}/></Link>
                                 </div>
                             </td>

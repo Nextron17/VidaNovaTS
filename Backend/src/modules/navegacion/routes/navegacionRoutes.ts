@@ -10,7 +10,6 @@ import { AnalyticsController } from '../controllers/AnalyticsController';
 import { AuditController } from '../controllers/AuditController';
 import { BackupController } from '../controllers/BackupController';
 import { CupsController } from '../controllers/CupsController';
-
 const router = Router();
 
 
@@ -123,5 +122,10 @@ router.post(
     CupsController.fixLegacyCategories
 );
 
-
+router.post(
+    '/cups/importar', 
+    requireRoles(['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR']), 
+    upload.single('file'), 
+    CupsController.importCupsFile
+);
 export default router;

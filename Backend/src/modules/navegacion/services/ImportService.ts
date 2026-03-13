@@ -262,281 +262,227 @@ export class ImportService {
     // 4. PROCESO PRINCIPAL: CARGA MASIVA MULTI-HOJA
     
 
+    // 4. PROCESO PRINCIPAL: CARGA MASIVA MULTI-HOJA
     static async processPatientExcel(buffer: Buffer) {
         try {
-            console.log("📂 INICIANDO IMPORTACIÓN DEFINITIVA (FUTURE-PROOF)...");
+            console.log("📂 INICIANDO IMPORTACIÓN DEFINITIVA (SOPORTE CSV/XLSX)...");
 
-            const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-            
-            let pCreated = 0, pUpdated = 0, fCreated = 0, errors = 0;
+            let rawData: any[] = [];
             let totalSheetsProcessed = 0;
+            let pCreated = 0, pUpdated = 0, fCreated = 0, errors = 0;
 
-            for (const sheetName of workbook.SheetNames) {
-                console.log(`📄 Analizando hoja: "${sheetName}"`);
+            const bufferStart = buffer.toString('utf-8', 0, 500);
+            if (bufferStart.includes(';') && bufferStart.split(';').length > 5) {
+                console.log("📄 CSV detectado (separador ';'). Usando motor manual...");
+                rawData = this.parseManualCSV(buffer);
+                totalSheetsProcessed = 1;
+            } else {
+                console.log("📊 Excel detectado. Usando SheetJS...");
+                const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+                for (const sheetName of workbook.SheetNames) {
+                    if (['VALIDACIONES', 'DINAMICA', 'HOJA1', 'RESUMEN', 'LOG', 'REPORTE', 'TABLA'].some(k => sheetName.toUpperCase().includes(k))) continue;
+                    const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+                    rawData = rawData.concat(sheetData);
+                    totalSheetsProcessed++;
+                }
+            }
+
+            if (rawData.length === 0) throw new Error("El archivo está vacío o no se pudo leer.");
+
+            const firstRow: any = rawData[0];
+            const keys = Object.keys(firstRow).map(k => ImportService.normalizeHeader(k));
+            const hasId = keys.some(k => k.includes('identificacion') || k.includes('cedula') || k.includes('documento') || k.includes('numero'));
+            
+            if (!hasId) {
+                console.log(`⚠️ No tiene columnas de identificación. Omitiendo.`);
+                throw new Error("No se detectó columna de identificación (Cédula/Documento).");
+            }
+
+            const mapKeys: Record<string, string[]> = {
+                'tipo_doc': ['tipo_de_identificacion', 'tipo_identificacion', 'tipo_documento', 'tipo_id', 'td'],
+                'doc': ['numero_de_identificacion', 'num_identificacion', 'numero_identificacion', 'cedula', 'documento', 'identificacion', 'numero_documento', 'id_paciente'],
+                'nom1': ['nombre_1', 'primer_nombre', 'nombres', 'nombre'],
+                'nom2': ['nombre_2', 'segundo_nombre'],
+                'ape1': ['apellido_1', 'primer_apellido', 'apellidos', 'apellido'],
+                'ape2': ['apellido_2', 'segundo_apellido'],
+                'tel': ['telefonos', 'telefono', 'celular', 'movil', 'contacto', 'tel'],
+                'email': ['correos', 'correo', 'email', 'e-mail'],
+                'eps': ['entidad', 'aseguradora', 'eps', 'prestador', 'provee', 'pagador'], 
+                'edad': ['edad', 'anos'],
+                'genero': ['genero', 'sexo'],
+                'ciudad': ['ciudad', 'municipio', 'residencia', 'procedencia'],
+                'depto': ['departamento'],
                 
-                if (['VALIDACIONES', 'DINAMICA', 'HOJA1', 'RESUMEN', 'LOG', 'REPORTE', 'TABLA'].some(k => sheetName.toUpperCase().includes(k))) {
-                    console.log(`⏭️ Saltando hoja irrelevante.`);
-                    continue;
+                'fecha_aten': ['fecha_de_atencion', 'fecha_atencion', 'fecha_solicitud', 'fecha_servicio', 'fecha_ingreso', 'servicios_solicitados', 'fecha_de_captacion', 'fecha_captacion', 'fecha_orden'],
+                'fecha_cita': ['fecha_de_la_cita', 'fecha_cita', 'fecha_programada', 'con_cita_programada', 'fecha_asignada'],
+                
+                'cups': ['cups', 'codigo', 'codigo_procedimiento', 'cod_cups'],
+                'servicio': ['servicio', 'descripcion', 'procedimiento', 'nombre_del_procedimiento', 'servicios_solicitados', 'examen'],
+                'cie10': ['codigo_diagnostico', 'cie10', 'dx', 'diagnostico_principal', 'codigo_dx'], 
+                'desc_dx': ['diagnostico', 'descripcion_diagnostico', 'nombre_dx'], 
+                
+                'estado_general': [
+                    'estado_de_la_solicitud', 'estado_solicitud', 'estado_cita', 'estado_de_la_cita', 
+                    'estado', 'situacion', 'solicitud', 'estado_asistencial', 'estado_administrativo', 'estado_autorizacion'
+                ],
+                
+                'nota_realizada': ['nota_realizada', 'numero_nota_realizada', 'nota_factura', 'numero_factura'], 
+                'obs': ['observacion', 'nota', 'descripcion', 'observaciones', 'comentario', 'detalle'],
+                'barrera': ['barrera', 'motivo_no_gestion'],
+                'responsable': ['responsable_1', 'responsable_2', 'usuario_responsable', 'gestor'],
+                'tipo_caso': ['tipo_de_caso', 'tipo_caso', 'clasificacion_caso']
+            };
+
+            console.log(`🚀 Procesando ${rawData.length} filas (Modo seguro)...`);
+
+            for (let i = 0; i < rawData.length; i++) {
+                const row = rawData[i];
+
+                if (i > 0 && i % 100 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
 
-                const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
-                if (rawData.length === 0) continue;
-
-                const firstRow: any = rawData[0];
-                const keys = Object.keys(firstRow).map(k => ImportService.normalizeHeader(k));
-                const hasId = keys.some(k => k.includes('identificacion') || k.includes('cedula') || k.includes('documento'));
-                
-                if (!hasId) {
-                    console.log(`⚠️ Hoja "${sheetName}" no tiene columnas de identificación. Omitiendo.`);
-                    continue;
-                }
-
-                totalSheetsProcessed++;
-
-                // MAPEO EXTENDIDO
-                const mapKeys: Record<string, string[]> = {
-                    'tipo_doc': ['tipo_de_identificacion', 'tipo_identificacion', 'tipo_documento', 'tipo_id', 'td'],
-                    'doc': ['numero_de_identificacion', 'num_identificacion', 'numero_identificacion', 'cedula', 'documento', 'identificacion', 'numero_documento', 'id_paciente'],
-                    'nom1': ['nombre_1', 'primer_nombre', 'nombres', 'nombre'],
-                    'nom2': ['nombre_2', 'segundo_nombre'],
-                    'ape1': ['apellido_1', 'primer_apellido', 'apellidos', 'apellido'],
-                    'ape2': ['apellido_2', 'segundo_apellido'],
-                    'tel': ['telefonos', 'telefono', 'celular', 'movil', 'contacto', 'tel'],
-                    'email': ['correos', 'correo', 'email', 'e-mail'],
-                    'eps': ['entidad', 'aseguradora', 'eps', 'prestador', 'provee', 'pagador'], 
-                    'edad': ['edad', 'anos'],
-                    'genero': ['genero', 'sexo'],
-                    'ciudad': ['ciudad', 'municipio', 'residencia', 'procedencia'],
-                    'depto': ['departamento'],
-                    
-                    'fecha_aten': ['fecha_de_atencion', 'fecha_atencion', 'fecha_solicitud', 'fecha_servicio', 'fecha_ingreso', 'servicios_solicitados', 'fecha_de_captacion', 'fecha_captacion', 'fecha_orden'],
-                    'fecha_cita': ['fecha_de_la_cita', 'fecha_cita', 'fecha_programada', 'con_cita_programada', 'fecha_asignada'],
-                    
-                    'cups': ['cups', 'codigo', 'codigo_procedimiento', 'cod_cups'],
-                    'servicio': ['servicio', 'descripcion', 'procedimiento', 'nombre_del_procedimiento', 'servicios_solicitados', 'examen'],
-                    'cie10': ['codigo_diagnostico', 'cie10', 'dx', 'diagnostico_principal', 'codigo_dx'], 
-                    'desc_dx': ['diagnostico', 'descripcion_diagnostico', 'nombre_dx'], 
-                    
-                    'estado_general': [
-                        'estado_de_la_solicitud', 'estado_solicitud', 'estado_cita', 'estado_de_la_cita', 
-                        'estado', 'situacion', 'solicitud', 'estado_asistencial', 'estado_administrativo', 'estado_autorizacion'
-                    ],
-                    
-                    'nota_realizada': ['nota_realizada', 'numero_nota_realizada', 'nota_factura', 'numero_factura'], 
-                    'obs': ['observacion', 'nota', 'descripcion', 'observaciones', 'comentario', 'detalle'],
-                    'barrera': ['barrera', 'motivo_no_gestion'],
-                    'responsable': ['responsable_1', 'responsable_2', 'usuario_responsable', 'gestor'],
-                    'tipo_caso': ['tipo_de_caso', 'tipo_caso', 'clasificacion_caso']
-                };
-
-                for (const row of rawData as any[]) {
-                    const t = await sequelize.transaction();
-
-                    try {
-                        const getVal = (key: string) => {
-                            const normalizedRow = Object.keys(row).reduce((acc, k) => { 
-                                acc[ImportService.normalizeHeader(k)] = row[k]; return acc; 
-                            }, {} as any);
-                            for (const alias of mapKeys[key]) {
-                                const foundKey = Object.keys(normalizedRow).find(k => k.includes(alias));
-                                if (key === 'doc' && foundKey && foundKey.includes('tipo')) continue; 
-                                if (foundKey) return normalizedRow[foundKey];
-                            }
-                            return '';
-                        };
-
-                        const rawDoc = getVal('doc');
-                        if (!rawDoc) { await t.commit(); continue; } 
-                        const docClean = String(rawDoc).replace(/[^a-zA-Z0-9]/g, ''); // 🛡️ Sanitizado naturalmente por regex
-                        if (ImportService.isGarbageID(docClean)) { await t.commit(); continue; } 
-
-                        // 1. Datos Paciente (TODOS ESTOS PASAN POR xss() GRACIAS A cleanText)
-                        const fullNom1 = ImportService.cleanText(getVal('nom1'));
-                        const fullNom2 = ImportService.cleanText(getVal('nom2'));
-                        const fullApe1 = ImportService.cleanText(getVal('ape1'));
-                        const fullApe2 = ImportService.cleanText(getVal('ape2'));
-                        let firstName = `${fullNom1} ${fullNom2}`.trim() || 'PACIENTE';
-                        let lastName = `${fullApe1} ${fullApe2}`.trim() || 'IMPORTADO';
-                        const phoneClean = ImportService.cleanPhone(getVal('tel'));
-                        const epsClean = ImportService.cleanText(getVal('eps'));
-                        const birthDateSafe = ImportService.calculateBirthDate(getVal('edad'));
-                        const rawType = getVal('tipo_doc');
-                        const finalDocType = ImportService.parseDocType(rawType);
-
-                        // 2. Fechas
-                        let dRequest = ImportService.parseDate(getVal('fecha_aten'));
-                        if (!dRequest) dRequest = new Date(); 
-                        let dAppoint = ImportService.parseDate(getVal('fecha_cita'));
-
-                        // 3. Lógica de Estados Definitiva
-                        const rawStatus = ImportService.cleanText(getVal('estado_general')); 
-                        const notaRealizada = ImportService.cleanText(getVal('nota_realizada')); 
-                        
-                        let status = 'PENDIENTE'; 
-
-                        if (
-                            rawStatus.includes('CANCEL') || 
-                            rawStatus.includes('NO ASISTE') || 
-                            rawStatus.includes('FALLID') ||
-                            rawStatus.includes('FALLEC') ||
-                            rawStatus.includes('NO ACEPTA') ||
-                            rawStatus.includes('INASIST') ||
-                            rawStatus.includes('DESIST') ||
-                            rawStatus.includes('RECHAZ') ||
-                            rawStatus.includes('ANULAD')
-                        ) {
-                            status = 'CANCELADO';
-                        } 
-                        else if (
-                            (notaRealizada.length > 2 && !notaRealizada.includes('NO')) || 
-                            rawStatus.includes('REALIZAD') || 
-                            rawStatus.includes('CUMPLID') || 
-                            rawStatus.includes('ATENDID') || 
-                            rawStatus.includes('FACTURA') ||
-                            rawStatus.includes('CERRAD') ||
-                            rawStatus.includes('ENTREGAD') ||
-                            rawStatus.includes('EJECUTAD') ||
-                            rawStatus.includes('FINALIZAD') ||
-                            rawStatus.includes('TERMINAD') ||
-                            rawStatus.includes('TOMAD') || 
-                            rawStatus.includes('LEID') ||
-                            rawStatus.includes('RESULTADO')
-                        ) {
-                            status = 'REALIZADO';
-                        } 
-                        else if (
-                            rawStatus.includes('ASIGNA') || 
-                            rawStatus.includes('PROGRAMA') || 
-                            rawStatus.includes('AGENDA') || 
-                            rawStatus.includes('CITA') ||
-                            (dAppoint && dAppoint > new Date()) 
-                        ) {
-                            status = 'AGENDADO';
-                        } 
-                        else if (
-                            rawStatus.includes('TRAMITE') || 
-                            rawStatus.includes('GESTION') || 
-                            rawStatus.includes('AUTORI') ||
-                            rawStatus.includes('PROCESO') ||
-                            rawStatus.includes('ESPERA') ||
-                            rawStatus.includes('REQUERIMIENTO') ||
-                            rawStatus.includes('SOLICITADO') ||
-                            rawStatus.includes('ENVIAD') ||
-                            rawStatus.includes('RADICAD') ||
-                            rawStatus.includes('DIFERIDO') ||
-                            rawStatus.includes('AVAL') ||
-                            rawStatus.includes('CAMBIO DE ORDEN')
-                        ) {
-                            status = 'EN_GESTION';
+                try {
+                    const getVal = (key: string) => {
+                        const normalizedRow = Object.keys(row).reduce((acc, k) => { 
+                            acc[ImportService.normalizeHeader(k)] = row[k]; return acc; 
+                        }, {} as any);
+                        for (const alias of mapKeys[key]) {
+                            const foundKey = Object.keys(normalizedRow).find(k => k.includes(alias));
+                            if (key === 'doc' && foundKey && foundKey.includes('tipo')) continue; 
+                            if (foundKey) return normalizedRow[foundKey];
                         }
+                        return '';
+                    };
 
-                        // Auto-cierre
-                        if (dAppoint && dAppoint < new Date() && status === 'AGENDADO') { status = 'REALIZADO'; }
-                        if (status === 'REALIZADO' && !dAppoint) { dAppoint = dRequest; }
+                    const rawDoc = getVal('doc');
+                    if (!rawDoc) continue; 
+                    const docClean = String(rawDoc).replace(/[^a-zA-Z0-9]/g, '');
+                    if (ImportService.isGarbageID(docClean)) continue; 
 
-                        // 4. Metadata Completa (TODO ESTÁ PASANDO POR xss() GRACIAS A cleanText)
-                        const obsBase = ImportService.cleanText(getVal('obs'));
-                        const barrera = ImportService.cleanText(getVal('barrera'));
-                        const resp = ImportService.cleanText(getVal('responsable'));
-                        const tipoCaso = ImportService.cleanText(getVal('tipo_caso'));
-                        const cie10Code = ImportService.cleanText(getVal('cie10'));
-                        const descDx = ImportService.cleanText(getVal('desc_dx'));
-                        
-                        let fullObs = obsBase;
-                        if (barrera && barrera !== 'NO') fullObs += ` | BARRERA: ${barrera}`;
-                        if (tipoCaso) fullObs += ` | TIPO: ${tipoCaso}`;
-                        if (resp) fullObs += ` | GESTOR: ${resp}`;
-                        if (cie10Code) fullObs += ` | DX: ${cie10Code}`;
-                        if (rawStatus && rawStatus !== status) fullObs += ` | ESTADO ORIGINAL: ${rawStatus}`;
+                    const fullNom1 = ImportService.cleanText(getVal('nom1'));
+                    const fullNom2 = ImportService.cleanText(getVal('nom2'));
+                    const fullApe1 = ImportService.cleanText(getVal('ape1'));
+                    const fullApe2 = ImportService.cleanText(getVal('ape2'));
+                    let firstName = `${fullNom1} ${fullNom2}`.trim() || 'PACIENTE';
+                    let lastName = `${fullApe1} ${fullApe2}`.trim() || 'IMPORTADO';
+                    const phoneClean = ImportService.cleanPhone(getVal('tel'));
+                    const epsClean = ImportService.cleanText(getVal('eps'));
+                    const birthDateSafe = ImportService.calculateBirthDate(getVal('edad'));
+                    const rawType = getVal('tipo_doc');
+                    const finalDocType = ImportService.parseDocType(rawType);
 
-                        // 5. Guardar Paciente
-                        let patient = await Patient.findOne({ where: { documentNumber: docClean }, transaction: t });
-                        if (!patient) {
-                            patient = await Patient.create({
-                                documentType: finalDocType, documentNumber: docClean, firstName, lastName, phone: phoneClean,
-                                insurance: epsClean, city: ImportService.cleanText(getVal('ciudad')),
-                                department: ImportService.cleanText(getVal('depto')), gender: ImportService.cleanText(getVal('genero')),
-                                birthDate: birthDateSafe, status: 'ACTIVO'
-                            }, { transaction: t });
-                            pCreated++;
-                        } else {
-                            // Actualización mínima para no romper datos
-                            let changed = false;
-                            if (phoneClean.length > 5 && patient.phone !== phoneClean) { patient.phone = phoneClean; changed = true; }
-                            if (changed) { await patient.save({ transaction: t }); pUpdated++; }
-                        }
+                    let dRequest = ImportService.parseDate(getVal('fecha_aten')) || new Date(); 
+                    let dAppoint = ImportService.parseDate(getVal('fecha_cita'));
 
-                        // 6. Guardar Seguimiento
-                        const service = ImportService.cleanText(getVal('servicio'));
-                        const cups = ImportService.cleanText(getVal('cups'));
-                        
-                        // Categoría Híbrida: Intenta CIE-10, si no, intenta TEXTO
-                        let category = ImportService.getCohortFromCie10(cie10Code); 
-                        if (!category) {
-                            category = ImportService.getCohortFromText(descDx); 
-                        }
-                        if (!category) {
-                            if (service.includes('CONSULTA')) category = 'CONSULTA';
-                            else category = 'PENDIENTE';
-                        }
-                        
-                        // Crear registro si hay datos mínimos
-                        if (cups || service || status === 'REALIZADO' || cie10Code || status === 'EN_GESTION') {
-                            const exists = await FollowUp.findOne({
-                                where: { 
-                                    patientId: patient.id, 
-                                    serviceName: service.substring(0, 255), 
-                                    dateRequest: dRequest 
-                                },
-                                transaction: t
-                            });
-                            
-                            if (!exists) {
-                                await FollowUp.create({
-                                    patientId: patient.id, dateRequest: dRequest, dateAppointment: dAppoint, 
-                                    status, cups: cups.substring(0, 20),
-                                    serviceName: service.substring(0, 255) || 'SERVICIO IMPORTADO',
-                                    eps: epsClean, observation: fullObs, 
-                                    category
-                                }, { transaction: t });
-                                fCreated++;
-                            } else {
-                                // Lógica de actualización inteligente
-                                let updateData: any = {};
-                                
-                                // Si mejoramos la categoría
-                                if ((!exists.category || exists.category === 'PENDIENTE') && category !== 'PENDIENTE') {
-                                    updateData.category = category;
-                                }
-                                
-                                // Si avanzamos de estado
-                                const statusPriority: Record<string, number> = { 'PENDIENTE': 0, 'EN_GESTION': 1, 'AGENDADO': 2, 'REALIZADO': 3, 'CANCELADO': 4 };
-                                const currentP = statusPriority[exists.status || 'PENDIENTE'] || 0;
-                                const newP = statusPriority[status] || 0;
+                    const rawStatus = ImportService.cleanText(getVal('estado_general')); 
+                    const notaRealizada = ImportService.cleanText(getVal('nota_realizada')); 
+                    let status = 'PENDIENTE'; 
 
-                                // Solo actualizamos si el nuevo estado es "mayor" o si es una corrección importante
-                                if (newP > currentP) {
-                                    updateData.status = status;
-                                    if (dAppoint) updateData.dateAppointment = dAppoint;
-                                }
-
-                                if (Object.keys(updateData).length > 0) {
-                                    await exists.update(updateData, { transaction: t });
-                                }
-                            }
-                        }
-                        await t.commit();
-                    } catch (e) { 
-                        await t.rollback();
-                        errors++;
+                    if (rawStatus.includes('CANCEL') || rawStatus.includes('NO ASISTE') || rawStatus.includes('FALLID') || rawStatus.includes('FALLEC') || rawStatus.includes('NO ACEPTA') || rawStatus.includes('INASIST') || rawStatus.includes('DESIST') || rawStatus.includes('RECHAZ') || rawStatus.includes('ANULAD')) {
+                        status = 'CANCELADO';
+                    } else if ((notaRealizada.length > 2 && !notaRealizada.includes('NO')) || rawStatus.includes('REALIZAD') || rawStatus.includes('CUMPLID') || rawStatus.includes('ATENDID') || rawStatus.includes('FACTURA') || rawStatus.includes('CERRAD') || rawStatus.includes('ENTREGAD') || rawStatus.includes('EJECUTAD') || rawStatus.includes('FINALIZAD') || rawStatus.includes('TERMINAD') || rawStatus.includes('TOMAD') || rawStatus.includes('LEID') || rawStatus.includes('RESULTADO')) {
+                        status = 'REALIZADO';
+                    } else if (rawStatus.includes('ASIGNA') || rawStatus.includes('PROGRAMA') || rawStatus.includes('AGENDA') || rawStatus.includes('CITA') || (dAppoint && dAppoint > new Date())) {
+                        status = 'AGENDADO';
+                    } else if (rawStatus.includes('TRAMITE') || rawStatus.includes('GESTION') || rawStatus.includes('AUTORI') || rawStatus.includes('PROCESO') || rawStatus.includes('ESPERA') || rawStatus.includes('REQUERIMIENTO') || rawStatus.includes('SOLICITADO') || rawStatus.includes('ENVIAD') || rawStatus.includes('RADICAD') || rawStatus.includes('DIFERIDO') || rawStatus.includes('AVAL') || rawStatus.includes('CAMBIO DE ORDEN')) {
+                        status = 'EN_GESTION';
                     }
+
+                    if (dAppoint && dAppoint < new Date() && status === 'AGENDADO') { status = 'REALIZADO'; }
+                    if (status === 'REALIZADO' && !dAppoint) { dAppoint = dRequest; }
+
+                    const obsBase = ImportService.cleanText(getVal('obs'));
+                    const barrera = ImportService.cleanText(getVal('barrera'));
+                    const resp = ImportService.cleanText(getVal('responsable'));
+                    const tipoCaso = ImportService.cleanText(getVal('tipo_caso'));
+                    const cie10Code = ImportService.cleanText(getVal('cie10'));
+                    const descDx = ImportService.cleanText(getVal('desc_dx'));
+                    
+                    let fullObs = obsBase;
+                    if (barrera && barrera !== 'NO') fullObs += ` | BARRERA: ${barrera}`;
+                    if (tipoCaso) fullObs += ` | TIPO: ${tipoCaso}`;
+                    if (resp) fullObs += ` | GESTOR: ${resp}`;
+                    
+                    // 🚀 ARREGLO CAC: El diagnóstico va estrictamente a la Nota de Observación
+                    let posibleDiagnostico = ImportService.getCohortFromCie10(cie10Code); 
+                    if (!posibleDiagnostico) posibleDiagnostico = ImportService.getCohortFromText(descDx); 
+
+                    if (posibleDiagnostico) {
+                        fullObs += ` | DX SUGERIDO: ${posibleDiagnostico}`;
+                    } else if (cie10Code) {
+                        fullObs += ` | DX: ${cie10Code}`;
+                    }
+
+                    if (rawStatus && rawStatus !== status) fullObs += ` | ESTADO ORIGINAL: ${rawStatus}`;
+
+                    let patient = await Patient.findOne({ where: { documentNumber: docClean } });
+                    if (!patient) {
+                        patient = await Patient.create({
+                            documentType: finalDocType, documentNumber: docClean, firstName, lastName, phone: phoneClean,
+                            insurance: epsClean, city: ImportService.cleanText(getVal('ciudad')),
+                            department: ImportService.cleanText(getVal('depto')), gender: ImportService.cleanText(getVal('genero')),
+                            birthDate: birthDateSafe, status: 'ACTIVO'
+                        });
+                        pCreated++;
+                    } else {
+                        let changed = false;
+                        if (phoneClean.length > 5 && patient.phone !== phoneClean) { patient.phone = phoneClean; changed = true; }
+                        if (changed) { await patient.save(); pUpdated++; }
+                    }
+
+                    const service = ImportService.cleanText(getVal('servicio'));
+                    const cups = ImportService.cleanText(getVal('cups'));
+                    
+                    // 🚀 ARREGLO PROCEDIMIENTO: Queda en PENDIENTE o CONSULTA para no ensuciar la tabla
+                    let category = 'PENDIENTE';
+                    if (service.includes('CONSULTA') || cups.startsWith('890')) {
+                        category = 'Consulta Externa';
+                    }
+                    
+                    if (cups || service || status === 'REALIZADO' || cie10Code || status === 'EN_GESTION') {
+                        const exists = await FollowUp.findOne({
+                            where: { patientId: patient.id, serviceName: service.substring(0, 255), dateRequest: dRequest }
+                        });
+                        
+                        if (!exists) {
+                            await FollowUp.create({
+                                patientId: patient.id, dateRequest: dRequest, dateAppointment: dAppoint, 
+                                status, cups: cups.substring(0, 20),
+                                serviceName: service.substring(0, 255) || 'SERVICIO IMPORTADO',
+                                eps: epsClean, observation: fullObs, category
+                            });
+                            fCreated++;
+                        } else {
+                            let updateData: any = {};
+                            
+                            if ((!exists.category || exists.category === 'PENDIENTE') && category !== 'PENDIENTE') {
+                                updateData.category = category;
+                            }
+                            
+                            const statusPriority: Record<string, number> = { 'PENDIENTE': 0, 'EN_GESTION': 1, 'AGENDADO': 2, 'REALIZADO': 3, 'CANCELADO': 4 };
+                            const currentP = statusPriority[exists.status || 'PENDIENTE'] || 0;
+                            const newP = statusPriority[status] || 0;
+
+                            if (newP > currentP) {
+                                updateData.status = status;
+                                if (dAppoint) updateData.dateAppointment = dAppoint;
+                            }
+                            
+                            if (Object.keys(updateData).length > 0) {
+                                await exists.update(updateData);
+                            }
+                        }
+                    }
+                } catch (e) { 
+                    errors++;
                 }
             }
 
             console.log(`✅ IMPORTACIÓN COMPLETADA: Hojas:${totalSheetsProcessed} | Nuevos:${pCreated} | Upd:${pUpdated} | Citas:${fCreated}`);
             
+            // La IA clasificará el resto silenciosamente en segundo plano
             await CupsController.runAutoCategorization();
-
             return { success: true, createdPatients: pCreated, updatedPatients: pUpdated, createdFollowUps: fCreated, errors };
 
         } catch (error: any) { 

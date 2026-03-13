@@ -1,15 +1,18 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
   Search, Filter, AlertCircle, 
   CheckCircle2, X, RefreshCw, Layers, 
   FlaskConical, Stethoscope, Scissors, Activity, FileQuestion, 
-  Loader2, Syringe, Bed, HeartPulse, FileText, ChevronRight, HelpCircle 
+  Loader2, Syringe, Bed, HeartPulse, FileText, ChevronRight, HelpCircle,
+  UploadCloud, 
+  Pill, // 👈 Icono para medicamentos
+  HeartHandshake // 👈 Icono para apoyo/hogar de paso
 } from "lucide-react";
 import api from "@/src/app/services/api"; 
 
-// --- 1. CATEGORÍAS VISUALES ---
+// --- 1. CATEGORÍAS VISUALES (Ajustadas a los Excel de Asmet Salud) ---
 const CATEGORIAS_VISUALES = [
   "Consulta Externa", 
   "Quimioterapia", 
@@ -19,40 +22,45 @@ const CATEGORIAS_VISUALES = [
   "Laboratorio", 
   "Clínica del Dolor", 
   "Estancia", 
+  "Medicamentos",       // 👈 Agregado para los fármacos
+  "Apoyo y Soporte",    // 👈 Agregado para Hogar de Paso / Alimentación
   "Oncología",
   "Otros"
 ];
 
 // --- 2. MAPEO: DB -> VISUAL ---
 const mapCategoryToModality = (dbCategory: string): string => {
-    if (!dbCategory) return 'PENDIENTE';
+    if (!dbCategory || dbCategory === 'PENDIENTE') return 'PENDIENTE';
+    
     const c = String(dbCategory).trim();
     const cUpper = c.toUpperCase();
 
+    // Si hace match exacto
     if (CATEGORIAS_VISUALES.map(v => v.toUpperCase()).includes(cUpper)) {
         return CATEGORIAS_VISUALES.find(v => v.toUpperCase() === cUpper) || c;
     }
 
+    // Reglas de Mapeo Inteligente
+    if (cUpper.includes('MEDICAMENTO') || cUpper.includes('FARMACIA')) return 'Medicamentos';
+    if (cUpper.includes('APOYO') || cUpper.includes('PASO') || cUpper.includes('HOGAR')) return 'Apoyo y Soporte';
     if (cUpper.includes('QUIMIO')) return 'Quimioterapia';
-    if (cUpper.includes('RADIO')) return 'Radioterapia';
-    if (cUpper.includes('IMAGEN')) return 'Imagenología';
-    if (cUpper.includes('LAB')) return 'Laboratorio';
-    if (cUpper.includes('CIRUGIA') || cUpper.includes('PROCEDIMIENTOS')) return 'Cirugía';
-    if (cUpper.includes('CONSULTA') || cUpper.includes('VALORACION')) return 'Consulta Externa';
-    if (cUpper.includes('ESTANCIA') || cUpper.includes('HOSPITAL')) return 'Estancia';
+    if (cUpper.includes('RADIO') || cUpper.includes('GAMAGRAFIA')) return 'Radioterapia';
+    if (cUpper.includes('IMAGEN') || cUpper.includes('RADIOGRAFIA')) return 'Imagenología';
+    if (cUpper.includes('LAB') || cUpper.includes('MOLECULAR') || cUpper.includes('GEN')) return 'Laboratorio';
+    if (cUpper.includes('CIRUGIA') || cUpper.includes('PROCEDIMIENTOS') || cUpper.includes('RESECCION')) return 'Cirugía';
+    if (cUpper.includes('CONSULTA') || cUpper.includes('VALORACION') || cUpper.includes('JUNTA')) return 'Consulta Externa';
+    if (cUpper.includes('ESTANCIA') || cUpper.includes('HOSPITAL') || cUpper.includes('INTERNACION')) return 'Estancia';
     if (cUpper.includes('DOLOR') || cUpper.includes('PALIATIVO')) return 'Clínica del Dolor';
-    if (cUpper.includes('TRANSPORTE') || cUpper.includes('COPIA') || cUpper.includes('OTROS')) return 'Otros';
 
     if (cUpper.includes('CAC') || cUpper.includes('TUMOR') || cUpper.includes('LEUCEMIA') || cUpper.includes('LINFOMA') || cUpper.includes('CANCER')) {
         return 'Oncología';
     }
 
-    return 'PENDIENTE';
+    return 'Otros';
 };
 
 // --- 3. ESTILOS VISUALES ---
 const getBadgeStyles = (grupoVisual: string) => {
-    // Quitamos tildes y pasamos a mayúsculas para comparar siempre bien
     const g = String(grupoVisual || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(); 
     
     if (g === 'QUIMIOTERAPIA') return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-200', icon: Syringe };
@@ -63,6 +71,8 @@ const getBadgeStyles = (grupoVisual: string) => {
     if (g === 'CONSULTA EXTERNA') return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: Stethoscope };
     if (g === 'ESTANCIA') return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: Bed };
     if (g === 'CLINICA DEL DOLOR') return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', icon: HeartPulse };
+    if (g === 'MEDICAMENTOS') return { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', icon: Pill }; 
+    if (g === 'APOYO Y SOPORTE') return { bg: 'bg-lime-50', text: 'text-lime-700', border: 'border-lime-200', icon: HeartHandshake }; 
     if (g === 'ONCOLOGIA') return { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', icon: FileText };
     if (g === 'OTROS') return { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', icon: HelpCircle };
     
@@ -76,11 +86,14 @@ export default function ConfigCupsPage() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [data, setData] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
+  
+  // Estados para los botones
   const [syncing, setSyncing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setIsClient(true); fetchCups(); }, []);
 
-  // ✅ CORRECCIÓN: Ruta modularizada /api/navegacion/cups
   const fetchCups = async () => {
     setLoading(true);
     try {
@@ -99,7 +112,6 @@ export default function ConfigCupsPage() {
     }
   };
 
-  // ✅ CORRECCIÓN: Ruta modularizada /api/navegacion/cups/sync
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -115,7 +127,32 @@ export default function ConfigCupsPage() {
     }
   };
 
-  // ✅ CORRECCIÓN: Ruta modularizada /api/navegacion/cups/bulk-update
+  // Maneja la subida del Excel de CUPS
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      setImporting(true);
+      try {
+          const res = await api.post("/navegacion/cups/importar", formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          
+          if (res.data.success) {
+              alert(`✅ Éxito: ${res.data.message}`);
+              fetchCups(); // Recargamos la tabla
+          }
+      } catch (error: any) {
+          alert("❌ Error al importar: " + (error.response?.data?.error || error.message));
+      } finally {
+          setImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = ''; 
+      }
+  };
+
   const handleBulkUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
@@ -138,7 +175,7 @@ export default function ConfigCupsPage() {
         setSelectedItems([]);
       }
     } catch (error) {
-      alert("Error en la actualización.");
+      alert("Error en la actualización masiva.");
     } finally {
       setLoading(false);
     }
@@ -198,13 +235,30 @@ export default function ConfigCupsPage() {
                 </div>
             </div>
 
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileUpload} 
+                accept=".xlsx, .xls, .csv" 
+                className="hidden" 
+            />
+
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing || syncing}
+              className="flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 disabled:opacity-50"
+            >
+                {importing ? <Loader2 size={18} className="animate-spin"/> : <UploadCloud size={18}/>}
+                <span className="hidden sm:inline">Importar Fichas</span>
+            </button>
+
             <button 
               onClick={handleSync}
-              disabled={syncing}
+              disabled={syncing || importing}
               className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 disabled:opacity-50"
             >
                 {syncing ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>}
-                <span className="hidden sm:inline">Sincronizar Catálogo</span>
+                <span className="hidden sm:inline">Sincronizar</span>
             </button>
         </div>
       </div>
@@ -312,6 +366,7 @@ export default function ConfigCupsPage() {
             <div className="flex items-center gap-3">
                 <select name="bulk_group" defaultValue="" className="bg-white/10 text-white text-sm font-bold py-2 pl-4 pr-10 rounded-xl border border-white/10 outline-none cursor-pointer appearance-none" required>
                     <option value="" disabled className="text-slate-900">Asignar Categoría...</option>
+                    <option value="PENDIENTE" className="text-slate-900">PENDIENTE</option>
                     {CATEGORIAS_VISUALES.map(c => <option key={c} value={c} className="text-slate-900">{c}</option>)}
                 </select>
             </div>

@@ -7,13 +7,117 @@ import {
   ArrowLeft, Search, ShieldAlert,
   Copy, Loader2, Wrench, Trash2, 
   Calendar, ArrowRight, Download,
-  FilterX
+  UploadCloud, UserPlus, Edit3, 
+  Layers, RefreshCw, FileText, User, Activity, Info
 } from "lucide-react";
 import Link from "next/link";
 import api from "@/src/app/services/api";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import * as XLSX from 'xlsx';
+
+// --- DICCIONARIO DE CAMPOS DE BD A ESPAÑOL ---
+const fieldDictionary: any = {
+    firstName: "Nombres", lastName: "Apellidos", documentNumber: "Cédula", 
+    phone: "Teléfono", insurance: "EPS", status: "Estado", 
+    observation: "Observación", category: "Categoría/Proc", 
+    dateAppointment: "Fecha de Cita", cups: "Código CUPS", 
+    city: "Ciudad", department: "Departamento"
+};
+
+const translateFields = (keys: string[]) => {
+    if (!keys || keys.length === 0) return "";
+    return keys.map(k => fieldDictionary[k] || k).join(", ");
+};
+
+const safeJSONParse = (data: any) => {
+    if (!data) return {};
+    if (typeof data === 'string') {
+        try { return JSON.parse(data); } catch { return {}; }
+    }
+    return data;
+};
+
+// --- HELPER: TRADUCTOR HUMANO DE AUDITORÍA AVANZADO ---
+const getAuditVisuals = (log: any) => {
+    const { action, tableName, recordId } = log;
+    const newVals = safeJSONParse(log.newValues);
+    const oldVals = safeJSONParse(log.oldValues);
+
+    // 🕵️ EXTRAER NOMBRE Y CC (Si existe en oldValues o newValues)
+    const contextData = Object.keys(oldVals).length > 0 ? oldVals : newVals;
+    let targetInfo = "";
+    if (contextData && (contextData.firstName || contextData.documentNumber)) {
+        const name = `${contextData.firstName || ''} ${contextData.lastName || ''}`.trim();
+        const cc = contextData.documentNumber || "S.N";
+        targetInfo = `${name} (CC: ${cc})`;
+    } else if (recordId !== 'MASIVO' && !recordId.includes('[')) {
+        targetInfo = `Registro Interno ID: ${recordId}`;
+    }
+
+    switch (action) {
+        case 'IMPORT':
+            return {
+                title: "Importación Masiva de Excel",
+                desc: "Actualizó la base de datos subiendo un nuevo archivo.",
+                details: newVals.sheetsProcessed !== undefined 
+                    ? `Nuevos: ${newVals.sheetsProcessed} | Actualizados: ${newVals.updates}` 
+                    : "",
+                color: "text-purple-600", bg: "bg-purple-100", icon: <UploadCloud size={16} />
+            };
+        case 'CREATE':
+            return {
+                title: "Creación de Registro",
+                desc: `Registró un nuevo ${tableName === 'Patients' ? 'Paciente' : 'Seguimiento'} manualmente.`,
+                target: targetInfo,
+                color: "text-emerald-600", bg: "bg-emerald-100", icon: <UserPlus size={16} />
+            };
+        case 'UPDATE':
+            const changedFields = translateFields(Object.keys(newVals));
+            return {
+                title: "Actualización Manual",
+                desc: `Editó y guardó cambios en un ${tableName === 'Patients' ? 'Paciente' : 'Seguimiento'}.`,
+                target: targetInfo,
+                details: changedFields ? `Campos modificados: ${changedFields}` : "",
+                color: "text-blue-600", bg: "bg-blue-100", icon: <Edit3 size={16} />
+            };
+        case 'BULK_UPDATE':
+            return {
+                title: "Gestión Masiva",
+                desc: "Aplicó un cambio de estado o nota a múltiples pacientes a la vez.",
+                details: newVals.status ? `Nuevo Estado: ${newVals.status}` : "Se agregó una observación masiva.",
+                target: `Aplicado a ${String(recordId).split(',').length} pacientes`,
+                color: "text-amber-600", bg: "bg-amber-100", icon: <Layers size={16} />
+            };
+        case 'UPDATE_CUPS':
+            return {
+                title: "Clasificación de CUPS",
+                desc: "Asignó una nueva modalidad en el Maestro de Procedimientos.",
+                details: `Nueva Categoría: ${newVals.category}`,
+                color: "text-indigo-600", bg: "bg-indigo-100", icon: <FileText size={16} />
+            };
+        case 'DELETE':
+            return {
+                title: "Eliminación de Registro",
+                desc: `Borró permanentemente un ${tableName === 'Patients' ? 'Paciente' : 'Registro'} del sistema.`,
+                target: targetInfo,
+                color: "text-red-600", bg: "bg-red-100", icon: <Trash2 size={16} />
+            };
+        case 'CLEAN_DUPLICATES':
+            return {
+                title: "Limpieza del Sistema",
+                desc: "Ejecutó el motor de limpieza inteligente para eliminar registros duplicados.",
+                color: "text-teal-600", bg: "bg-teal-100", icon: <RefreshCw size={16} />
+            };
+        default:
+            return {
+                title: "Acción del Sistema",
+                desc: `Modificó el módulo de ${tableName}.`,
+                target: targetInfo,
+                color: "text-slate-600", bg: "bg-slate-100", icon: <User size={16} />
+            };
+    }
+};
 
 export default function AuditoriaPage() {
   const [loading, setLoading] = useState(true);
@@ -25,18 +129,10 @@ export default function AuditoriaPage() {
   const [viewAll, setViewAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [stats, setStats] = useState({
-      total: 0,
-      pacientes: 0,
-      sin_eps: 0,
-      sin_cups: 0,
-      fechas_malas: 0
-  });
-
+  const [stats, setStats] = useState({ total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 });
   const [duplicates, setDuplicates] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
 
-  // 1. CARGAR ESTADÍSTICAS
   const fetchStats = async () => {
       try {
           const resStats = await api.get('/navegacion/audit/stats'); 
@@ -44,62 +140,39 @@ export default function AuditoriaPage() {
               setStats(resStats.data.stats);
               setDuplicates(resStats.data.duplicates || []);
           }
-      } catch (error: any) {
-          console.error("❌ Error en STATS:", error.message);
-      }
+      } catch (error: any) { console.error("❌ Error en STATS:", error.message); }
   };
 
-  // 2. CARGAR LOGS (Basado en filtros)
   const fetchLogs = useCallback(async () => {
       try {
-          const params = viewAll 
-            ? { all: 'true' } 
-            : { month: selectedMonth, year: selectedYear };
-
+          const params = viewAll ? { all: 'true' } : { month: selectedMonth, year: selectedYear };
           const resLogs = await api.get('/navegacion/audit/logs', { params }); 
-          if (resLogs.data.success) {
-              setLogs(resLogs.data.data || []);
-          }
-      } catch (error: any) {
-          console.error("❌ Error en LOGS:", error.message);
-      }
+          if (resLogs.data.success) { setLogs(resLogs.data.data || []); }
+      } catch (error: any) { console.error("❌ Error en LOGS:", error.message); }
   }, [selectedMonth, selectedYear, viewAll]);
 
   useEffect(() => {
-      const init = async () => {
-          await fetchStats();
-          await fetchLogs();
-          setLoading(false);
-      };
+      const init = async () => { await fetchStats(); await fetchLogs(); setLoading(false); };
       init();
   }, []);
 
-  useEffect(() => {
-      if (!loading) fetchLogs();
-  }, [selectedMonth, selectedYear, viewAll, fetchLogs, loading]);
+  useEffect(() => { if (!loading) fetchLogs(); }, [selectedMonth, selectedYear, viewAll, fetchLogs, loading]);
 
-  // --- EXPORTAR A EXCEL ---
   const handleExportExcel = () => {
     if (logs.length === 0) return alert("No hay datos para exportar");
-
     const dataToExport = filteredLogs.map(log => ({
         "FECHA": format(new Date(log.createdAt), "dd/MM/yyyy HH:mm:ss"),
         "USUARIO": log.user?.name || 'Sistema',
-        "ROL": log.user?.role || 'N/A',
         "ACCION": log.action,
         "TABLA": log.tableName,
         "ID_REGISTRO": log.recordId
     }));
-
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Auditoria");
-    
-    const fileName = `Auditoria_${viewAll ? 'Total' : `${selectedMonth}_${selectedYear}`}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    XLSX.writeFile(workbook, `Auditoria_${viewAll ? 'Total' : `${selectedMonth}_${selectedYear}`}.xlsx`);
   };
 
-  // --- FILTRO LOCAL (Buscador rápido) ---
   const filteredLogs = logs.filter(log => 
     log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.tableName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -107,7 +180,6 @@ export default function AuditoriaPage() {
     log.user?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // --- ACCIONES DE REPARACIÓN ---
   const handleFixDates = async () => {
       if (window.confirm(`¿Corregir ${stats.fechas_malas} fechas invertidas?`)) {
           setFixing(true);
@@ -143,16 +215,6 @@ export default function AuditoriaPage() {
       { label: 'Pacientes sin EPS Asignada', count: stats.sin_eps, icon: Database },
       { label: 'Incoherencia de Fechas', count: stats.fechas_malas, icon: AlertOctagon },
   ];
-
-  const getActionBadge = (action: string) => {
-      const styles: any = {
-          'CREATE': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-          'UPDATE': 'bg-blue-100 text-blue-700 border-blue-200',
-          'DELETE': 'bg-red-100 text-red-700 border-red-200',
-          'IMPORT': 'bg-purple-100 text-purple-700 border-purple-200',
-      };
-      return styles[action] || 'bg-slate-100 text-slate-700 border-slate-200';
-  };
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -261,12 +323,13 @@ export default function AuditoriaPage() {
           </div>
       </div>
 
-      {/* --- SECCIÓN: CAJA NEGRA --- */}
+      {/* --- SECCIÓN: RASTRO DE ACTIVIDAD (MODERNIZADO E INTELIGENTE) --- */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 mt-8">
-        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShieldAlert className="text-emerald-500"/> Rastro de Actividad</h2>
+        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <Activity className="text-blue-600"/> Rastro de Actividad
+        </h2>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            {/* Buscador Local */}
             <div className="relative flex-grow md:flex-grow-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <input 
@@ -278,7 +341,6 @@ export default function AuditoriaPage() {
                 />
             </div>
 
-            {/* Selectores Mes/Año */}
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
                 <Calendar size={14} className="text-blue-500" />
                 <select disabled={viewAll} value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none cursor-pointer">
@@ -299,42 +361,78 @@ export default function AuditoriaPage() {
         </div>
       </div>
       
-      <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white overflow-hidden">
-          <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                  <thead>
-                      <tr className="bg-slate-50/80 text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
-                          <th className="p-5">Fecha y Hora</th><th className="p-5">Responsable</th><th className="p-5">Acción</th><th className="p-5">Módulo / ID</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                      {filteredLogs.length === 0 ? (
-                          <tr><td colSpan={4} className="p-10 text-center text-slate-400 italic">No se encontraron registros.</td></tr>
-                      ) : (
-                          filteredLogs.map((log) => (
-                              <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
-                                  <td className="p-5 text-slate-600 font-medium text-xs">
-                                      {format(new Date(log.createdAt), "dd MMM, hh:mm a", { locale: es })}
-                                  </td>
-                                  <td className="p-5">
-                                      <div className="flex items-center gap-3">
-                                          <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-black text-[10px]">{log.user?.name?.charAt(0) || '?'}</div>
-                                          <div><p className="font-bold text-slate-700 text-xs">{log.user?.name || 'Sistema'}</p></div>
+      {/* TIMELINE DE AUDITORÍA */}
+      <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 p-6 md:p-10">
+          {filteredLogs.length === 0 ? (
+              <div className="py-12 text-center flex flex-col items-center gap-3">
+                  <Activity size={40} className="text-slate-200" />
+                  <p className="text-slate-400 font-medium">No se encontraron movimientos en este periodo.</p>
+              </div>
+          ) : (
+              <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
+                  {filteredLogs.map((log: any, index: number) => {
+                      const visual = getAuditVisuals(log); // 👈 Llama al nuevo traductor inteligente
+                      const formattedDate = format(new Date(log.createdAt), "dd MMM", { locale: es });
+                      const formattedTime = format(new Date(log.createdAt), "hh:mm a");
+
+                      return (
+                          <div key={log.id || index} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                              
+                              {/* Icono Central */}
+                              <div className={`flex items-center justify-center w-10 h-10 rounded-full border-4 border-white ${visual.bg} ${visual.color} shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-transform duration-300 group-hover:scale-110`}>
+                                  {visual.icon}
+                              </div>
+                              
+                              {/* Tarjeta de Información */}
+                              <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-white hover:shadow-lg hover:border-slate-200 transition-all duration-300">
+                                  
+                                  {/* Encabezado: Título y Hora */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                      <h4 className={`font-bold text-sm ${visual.color}`}>{visual.title}</h4>
+                                      <span className="text-[10px] font-bold text-slate-400 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-sm whitespace-nowrap">
+                                          {formattedDate}, {formattedTime}
+                                      </span>
+                                  </div>
+                                  
+                                  {/* Descripción Principal */}
+                                  <p className="text-xs text-slate-600 leading-relaxed mb-3">{visual.desc}</p>
+                                  
+                                  {/* 🎯 EL TOQUE MÁGICO: Nombre, CC y campos cambiados */}
+                                  {(visual.target || visual.details) && (
+                                      <div className="mb-4 space-y-1.5">
+                                          {visual.target && (
+                                              <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-slate-500 bg-white p-2 border border-slate-100 rounded-lg">
+                                                  <User size={12} className="text-slate-400"/> 
+                                                  {visual.target}
+                                              </div>
+                                          )}
+                                          {visual.details && (
+                                              <div className="flex items-center gap-2 text-[10px] font-bold text-blue-700 bg-blue-50/50 p-2 border border-blue-100 rounded-lg">
+                                                  <Info size={12} className="text-blue-500"/>
+                                                  {visual.details}
+                                              </div>
+                                          )}
                                       </div>
-                                  </td>
-                                  <td className="p-5"><span className={`px-2 py-1 text-[9px] font-black uppercase rounded-lg border ${getActionBadge(log.action)}`}>{log.action}</span></td>
-                                  <td className="p-5">
-                                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                                          <Database size={12} className="text-slate-400" /> {log.tableName} <ArrowRight size={12} className="text-slate-300" />
-                                          <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">ID: {log.recordId}</span>
+                                  )}
+                                  
+                                  {/* Pie de Tarjeta: Usuario */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-slate-200/60 gap-3">
+                                      <div className="flex items-center gap-2">
+                                          <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500 shadow-inner">
+                                              {log.user?.name ? log.user.name.charAt(0) : 'S'}
+                                          </div>
+                                          <span className="text-[11px] font-bold text-slate-700">
+                                              {log.user?.name || 'Sistema Automatizado'}
+                                          </span>
                                       </div>
-                                  </td>
-                              </tr>
-                          ))
-                      )}
-                  </tbody>
-              </table>
-          </div>
+                                  </div>
+
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          )}
       </div>
 
     </div>

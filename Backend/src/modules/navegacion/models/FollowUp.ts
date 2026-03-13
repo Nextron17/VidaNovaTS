@@ -1,6 +1,7 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { Patient } from './Patient';
 import { User } from '../../usuarios/models/User';
+import { MasterCUP } from './MasterCUP'; // 👈 Importación esencial
 
 @Table({
     tableName: 'followups',
@@ -16,13 +17,19 @@ export class FollowUp extends Model {
     patient!: Patient;
 
     @ForeignKey(() => User)
-    @Column({ type: DataType.INTEGER, allowNull: true }) // Dejado en true temporalmente para no romper datos viejos que no tenían usuario
+    @Column({ type: DataType.INTEGER, allowNull: true }) 
     userId!: number;
 
     @BelongsTo(() => User)
     user!: User;
 
-    // --- DATOS DEL SEGUIMIENTO ---
+    @ForeignKey(() => MasterCUP)
+    @Column({ type: DataType.STRING(50), allowNull: true })
+    cups!: string;
+
+    @BelongsTo(() => MasterCUP, { foreignKey: 'cups', targetKey: 'codigo' })
+    masterCup!: MasterCUP;
+
     @Column({ type: DataType.DATEONLY, allowNull: true })
     dateRequest!: Date | null;
 
@@ -31,9 +38,6 @@ export class FollowUp extends Model {
 
     @Column({ type: DataType.STRING, defaultValue: 'PENDIENTE' })
     status!: string;
-
-    @Column({ type: DataType.STRING, allowNull: true })
-    cups!: string;
 
     @Column({ type: DataType.TEXT, allowNull: true })
     serviceName!: string;

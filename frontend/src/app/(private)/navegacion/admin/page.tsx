@@ -549,65 +549,77 @@ export default function AdminDashboardPage() {
                         <th className="px-6 py-4 text-right">ACCIÓN</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-sm font-medium">
+                
+
+                <tbody className="divide-y divide-slate-100 text-sm">
                     {patients.map((row) => (
-                        <tr key={row.id} className={`group transition-all duration-150 ${getRowStyle(row.estado, row.dias, row.meta)}`}>
+                        <tr key={row.id} className={`transition-all duration-150 hover:bg-slate-50 ${row.estado === 'CANCELADO' ? 'opacity-70' : ''}`}>
+                            
+                            {/* 1. Checkbox */}
                             <td className="px-6 py-4 text-center">
                                 <input type="checkbox" checked={seleccionados.includes(row.id)} onChange={() => toggleSeleccion(row.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"/>
                             </td>
+                            
+                            {/* 2. Paciente y Cédula */}
                             <td className="px-4 py-4">
-                                <div className="font-bold text-slate-800 text-xs group-hover:text-blue-700 transition-colors">{row.paciente}</div>
-                                <div className="flex items-center gap-2 mt-1.5">
-                                    <span className="text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-500 font-mono">{row.doc}</span>
+                                <div className="font-bold text-slate-800 text-xs uppercase">{row.paciente}</div>
+                                <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
+                                    {row.doc}
                                     <WhatsAppActions tel={row.tel} nombre={row.paciente} />
                                 </div>
                             </td>
+                            
+                            {/* 3. SERVICIO / CUPS (LIMPIO Y ESPECÍFICO) */}
                             <td className="px-4 py-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <div className="font-black text-slate-800 text-[11px] uppercase tracking-tight flex items-center gap-1.5">
-                                        {getIconByModality(row.modalidad)}
-                                        {row.modalidad}
-                                    </div>
-                                    <div className="w-fit max-w-[250px]">
-                                        <span className="text-[10px] font-bold text-blue-700 uppercase bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md truncate block">
-                                            {row.cohorte}
-                                        </span>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                                        <span className="bg-slate-100 px-1.5 rounded text-slate-500 font-bold border border-slate-200">CUPS</span>
+                                <div className="text-xs font-bold text-slate-700 uppercase tracking-tight">
+                                    {row.modalidad.includes('=') || row.modalidad.includes('CAC') ? 'ONCOLOGÍA' : row.modalidad}
+                                </div>
+                                {row.cups !== "---" && row.cups !== "SIN CUPS" && (
+                                    <div className="text-[11px] text-blue-600 font-mono font-bold mt-0.5">
                                         {row.cups}
                                     </div>
-                                </div>
+                                )}
                             </td>
+                            
+                            {/* 4. Estado */}
                             <td className="px-4 py-4 text-center">
-                                <div className="flex flex-col items-center gap-1">
-                                    {row.fecha_sol !== '---' && (
-                                        <div className="flex items-center gap-1 text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                                            <Clock4 size={10}/> {row.fecha_sol}
-                                        </div>
-                                    )}
-                                    <span className="text-[10px] text-slate-400 font-mono">{row.fecha_cita !== '---' ? row.fecha_cita : '--/--/--'}</span>
-                                </div>
-                            </td>
-                            <td className="px-4 py-4 text-center">
-                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase shadow-sm ${getBadgeStyle(row.estado)}`}>
+                                <span className={`text-[11px] font-bold uppercase ${row.estado.includes('REALIZADO') ? 'text-emerald-600' : 'text-slate-700'}`}>
                                     {row.estado.replace('_', ' ')}
                                 </span>
                             </td>
+                            
+                            {/* 5. Fechas */}
+                            <td className="px-4 py-4 text-left">
+                                <div className="text-[11px] text-slate-600 font-medium">
+                                    <div>Sol: {row.fecha_sol}</div>
+                                    {row.fecha_cita !== '---' && <div className="mt-0.5 text-blue-600">Cita: {row.fecha_cita}</div>}
+                                </div>
+                            </td>
+                            
+                            {/* 6. Tiempos */}
                             <td className="px-4 py-4 text-center">
                                 <div className="flex flex-col items-center">
-                                    <span className={`text-[11px] font-black px-2 py-0.5 rounded ${row.dias > row.meta ? 'text-red-600 bg-red-50 ring-1 ring-red-100' : 'text-slate-600 bg-slate-100'}`}>
+                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${row.dias > row.meta ? 'text-red-600 bg-red-50 ring-1 ring-red-100' : 'text-slate-600 bg-slate-100'}`}>
                                         {row.dias} días
                                     </span>
-                                    <span className="text-[9px] text-slate-400 mt-0.5">Meta: {row.meta}</span>
                                 </div>
                             </td>
-                            <td className="px-6 py-4 text-right">
-                                <div className="flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <Link href={`/navegacion/admin/pacientes/perfil?id=${row.id}`} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition-all" title="Ver Perfil"><Eye size={16}/></Link>
-                                    <Link href={`/navegacion/admin/gestion?id=${row.id}`} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-orange-600 hover:border-orange-200 hover:shadow-sm transition-all" title="Gestionar"><Edit size={16}/></Link>
+                            
+                            {/* 7. Observaciones */}
+                            <td className="px-4 py-4">
+                                <div className="text-[11px] text-slate-600 truncate max-w-[200px]" title={row.obs}>
+                                    {row.obs || '-'}
                                 </div>
                             </td>
+                            
+                            {/* 8. Acciones */}
+                            <td className="px-6 py-4">
+                                <div className="flex justify-center gap-2">
+                                    <Link href={`/navegacion/admin/pacientes/perfil?id=${row.patientId}`} className="text-slate-400 hover:text-blue-600 transition-all" title="Ver Perfil"><Eye size={16}/></Link>
+                                    <Link href={`/navegacion/admin/gestion?id=${row.id}`} className="text-slate-400 hover:text-orange-500 transition-all" title="Gestionar"><Edit size={16}/></Link>
+                                </div>
+                            </td>
+                            
                         </tr>
                     ))}
                 </tbody>

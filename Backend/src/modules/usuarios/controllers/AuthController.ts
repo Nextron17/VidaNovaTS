@@ -1,17 +1,19 @@
 import { Request, Response } from 'express';
-import { User } from '../../usuarios/models/User';
+import { User } from '../models/User'; 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { sendEmail } from '../../../core/utils/mailer';
+import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize'; 
+import { sendEmail } from '../../../core/utils/mailer'; // 🚀 Importación corregida
 
 export class AuthController {
 
-    // INICIAR SESIÓN (USANDO CC)
+    // 1. INICIAR SESIÓN (CON CÉDULA)
     static login = async (req: Request, res: Response) => {
         try {
             const { documentNumber, password } = req.body;
             
-            // 1. Buscar usuario por documento
+            // Buscar usuario por documento
             const user = await User.findOne({ where: { documentNumber } });
 
             if (!user) {
@@ -21,8 +23,8 @@ export class AuthController {
                 });
             }
 
-            // 2. Verificar contraseña
-            const isPasswordCorrect = await user.checkPassword(password);
+            // Verificar contraseña
+            const isPasswordCorrect = await bcrypt.compare(password, user.password);
             if (!isPasswordCorrect) {
                 return res.status(401).json({ 
                     success: false, 
@@ -30,14 +32,14 @@ export class AuthController {
                 });
             }
 
-            // 3. Generar JWT
+            // Generar JWT
             const token = jwt.sign(
                 { id: user.id, role: user.role }, 
                 process.env.JWT_SECRET || 'secret_dev_key', 
                 { expiresIn: '8h' }
             );
 
-            // 4. Responder con estructura unificada para el Frontend
+            // Responder con estructura unificada para el Frontend
             res.json({
                 success: true,
                 message: 'Autenticación exitosa',
@@ -61,39 +63,51 @@ export class AuthController {
         }
     }
 
-    // RECUPERAR CONTRASEÑA (POR DOCUMENTO)
+    // 2. SOLICITAR RECUPERACIÓN
     static forgotPassword = async (req: Request, res: Response) => {
         try {
             const { documentNumber } = req.body;
-            
-            // Buscamos por documento ahora
             const user = await User.findOne({ where: { documentNumber } });
 
             if (!user || !user.email) {
-                // Respuesta genérica por seguridad
                 return res.json({ 
                     success: true, 
-                    message: 'Si el usuario existe y tiene un correo asociado, recibirá instrucciones.' 
+                    message: 'Si el usuario existe y tiene un correo asociado, recibirá las instrucciones.' 
                 });
             }
 
-            const token = crypto.randomBytes(20).toString('hex');
-            user.resetPasswordToken = token;
-            user.resetPasswordExpires = new Date(Date.now() + 3600000); 
+            const token = crypto.randomBytes(32).toString('hex');
+            user.resetToken = token;
+            user.resetTokenExpire = new Date(Date.now() + 3600000); // 1 hora
             await user.save();
 
-            const resetUrl = `http://localhost:3000/reset-password/${token}`;
+            // 🚀 MAGIA DINÁMICA SEGURA (Manejo de TypeScript estricto)
+            const referer = req.headers.referer as string | undefined;
+            
+            let clientUrl = req.headers.origin 
+                || (referer ? referer.split('/recuperar')[0] : '') 
+                || process.env.FRONTEND_URL 
+                || 'http://localhost:3000';
+            
+            // Limpiar posibles barras finales
+            clientUrl = clientUrl.replace(/\/$/, '');
+
+            const resetUrl = `${clientUrl}/recuperar/contrasena?token=${token}`;
+
             const message = `
-                <div style="font-family: sans-serif; color: #333;">
-                    <h1 style="color: #2563eb;">Recuperación de Acceso - Vidanova</h1>
-                    <p>Has solicitado restablecer tu contraseña para el usuario con documento: <b>${user.documentNumber}</b></p>
-                    <p>Haz clic en el siguiente botón para continuar:</p>
-                    <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Restablecer Contraseña</a>
-                    <p style="margin-top: 20px; font-size: 12px; color: #666;">Este enlace expirará en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
+                <div style="font-family: sans-serif; color: #333; max-w: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                    <h1 style="color: #0d9488; text-align: center;">Recuperación de Acceso</h1>
+                    <p style="font-size: 16px;">Has solicitado restablecer tu contraseña para el usuario con documento: <b>${user.documentNumber}</b></p>
+                    <p style="font-size: 16px;">Haz clic en el siguiente botón para continuar:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${resetUrl}" style="background-color: #0d9488; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; font-size: 16px;">Restablecer Contraseña</a>
+                    </div>
+                    <p style="margin-top: 20px; font-size: 12px; color: #666; text-align: center;">Este enlace expirará en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
                 </div>
             `;
 
-            await sendEmail(user.email, "Restablecer Contraseña - Vidanova", message);
+            // Enviar correo
+            await sendEmail(user.email, "Restablecer Contraseña - VidaNova", message);
 
             res.json({ 
                 success: true, 
@@ -108,4 +122,46 @@ export class AuthController {
             });
         }
     }
+    
+    // 3. CAMBIAR LA CONTRASEÑA
+    static resetPassword = async (req: Request, res: Response) => {
+        try {
+            const { token, newPassword } = req.body;
+
+            // Buscar usuario que tenga ese token EXACTO y que la fecha de expiración sea MAYOR a ahora
+            const user = await User.findOne({
+                where: {
+                    resetToken: token,
+                    resetTokenExpire: { [Op.gt]: new Date() } 
+                }
+            });
+
+            if (!user) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'El enlace de recuperación es inválido o ha caducado.' 
+                });
+            }
+
+            // Encriptar la nueva contraseña
+            const salt = await bcrypt.genSalt(10);
+            user.password = await bcrypt.hash(newPassword, salt);
+
+            // Limpiar el token
+            user.resetToken = null;
+            user.resetTokenExpire = null;
+            await user.save();
+
+            res.json({ 
+                success: true, 
+                message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' 
+            });
+        } catch (error) {
+            console.error("❌ Reset Password Error:", error);
+            res.status(500).json({ 
+                success: false,
+                error: 'Error al intentar restablecer la contraseña.' 
+            });
+        }
+    };
 }

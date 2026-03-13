@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { FollowUp } from '../models/FollowUp';
 import { Patient } from '../models/Patient';
 
+import { sequelize } from '../../../core/config/db'; 
+import { AuditLog } from '../../../core/models/AuditLog';
+
 export class FollowUpController {
 
     // Obtener un seguimiento por ID (con datos del paciente)
@@ -55,16 +58,62 @@ export class FollowUpController {
 
     // 3. EDITAR SEGUIMIENTO 
     static updateFollowUp = async (req: Request, res: Response) => {
+        // Iniciamos una transacción de seguridad
+        const t = await sequelize.transaction();
+        const operatorId = req.user?.id; // El usuario que está haciendo el cambio
+
         try {
             const { id } = req.params;
-            const followUp = await FollowUp.findByPk(String(id));
+            const data = req.body;
+            
+            const followUp = await FollowUp.findByPk(String(id), {
+                include: [{ model: Patient }] // Traemos al paciente para tener su nombre
+            });
 
-            if (!followUp) return res.status(404).json({ success: false, error: 'No encontrado' });
+            if (!followUp) {
+                await t.rollback();
+                return res.status(404).json({ success: false, error: 'No encontrado' });
+            }
 
-            await followUp.update(req.body);
+            // 🕵️‍♂️ 1. CAPTURAR EL PASADO (Cómo estaba antes)
+            const oldData = followUp.toJSON();
 
+            // 2. Ejecutar la actualización en la BD
+            await followUp.update(data, { transaction: t });
+
+            // 🕵️‍♂️ 3. DETECTAR LOS CAMBIOS EXACTOS (El "Chisme")
+            const changesDetected = Object.keys(data).reduce((acc: any, key) => {
+                // Si el dato que llegó es diferente al que estaba, lo guardamos
+                if (data[key] !== oldData[key] && data[key] !== undefined) {
+                    acc[key] = data[key];
+                }
+                return acc;
+            }, {});
+
+            // 🛡️ 4. GUARDAR EN LA AUDITORÍA (Solo si realmente cambió algo)
+            if (operatorId && Object.keys(changesDetected).length > 0) {
+                // Le pasamos también el nombre y cédula del paciente para que el Frontend lo muestre bonito
+                const patientInfo = followUp.patient ? {
+                    firstName: followUp.patient.firstName,
+                    lastName: followUp.patient.lastName,
+                    documentNumber: followUp.patient.documentNumber
+                } : {};
+
+                await AuditLog.create({
+                    userId: operatorId,
+                    action: 'UPDATE',
+                    tableName: 'FollowUps',
+                    recordId: String(id),
+                    oldValues: { ...oldData, ...patientInfo }, // Le inyectamos quién es el paciente
+                    newValues: changesDetected // Aquí van solo los campos que tocó el usuario
+                }, { transaction: t });
+            }
+
+            await t.commit();
             res.json({ success: true, data: followUp });
+
         } catch (error) {
+            await t.rollback();
             console.error("Error updating followup:", error);
             res.status(500).json({ success: false, error: 'Error al actualizar' });
         }

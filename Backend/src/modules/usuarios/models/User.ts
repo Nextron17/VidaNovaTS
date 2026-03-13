@@ -135,4 +135,10 @@ role!: string;
         delete values.resetPasswordExpires;
         return values;
     }
+
+    @Column({ type: DataType.STRING, allowNull: true })
+    resetToken!: string | null;
+
+    @Column({ type: DataType.DATE, allowNull: true })
+    resetTokenExpire!: Date | null;
 }
