@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, FileText, Info, Loader2 
+  AlertCircle, FileText, Info, Loader2, Trash2 // 🚀 Agregué Trash2
 } from "lucide-react";
 import api from "@/src/app/services/api";
 
@@ -42,28 +42,31 @@ export default function ImportarDataAtencionPage() {
     }
   };
 
-  // --- 🚀 LÓGICA DE SUBIDA ACTUALIZADA ---
+  // 🚀 NUEVO: Función para limpiar el archivo si el usuario se equivoca
+  const clearFile = (e: React.MouseEvent) => {
+      e.preventDefault(); // Evita que se abra el selector de archivos al hacer clic en borrar
+      setFile(null);
+  };
+
+  // --- LÓGICA DE SUBIDA ---
   const handleUpload = async () => {
     if (!file) return;
 
     setUploading(true);
     const formData = new FormData();
-    
-    // ✅ CAMBIO 1: El backend ahora espera el campo 'file' (Multer single)
     formData.append("file", file); 
 
     try {
-      // ✅ CAMBIO 2: Ruta actualizada al nuevo módulo /navegacion
       const res = await api.post("/navegacion/patients/import", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const stats = res.data.details;
+      // 🚀 BLINDAJE: Si el backend no envía details, no se rompe la app
+      const stats = res.data.details || { total: 'Varios', created: 'N/A', updated: 'N/A' };
       
       alert(`✅ ¡Importación Finalizada!\n\n📄 Filas procesadas: ${stats.total}\n🆕 Nuevos ingresos: ${stats.created}\n🔄 Registros actualizados: ${stats.updated}`);
       
       setFile(null);
-      // ✅ CAMBIO 3: Redirección al listado operativo de atención
       router.push("/navegacion/atencion/pacientes"); 
 
     } catch (error: any) {
@@ -113,12 +116,12 @@ export default function ImportarDataAtencionPage() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={`
-                    border-2 border-dashed rounded-[2rem] p-12 text-center transition-all duration-500 cursor-pointer
+                    border-2 border-dashed rounded-[2rem] p-12 text-center transition-all duration-500 
                     ${isDragging 
                         ? 'border-emerald-500 bg-emerald-50 scale-[1.01] shadow-lg' 
                         : file 
                             ? 'border-emerald-500 bg-emerald-50/50 shadow-inner'
-                            : 'border-slate-200 hover:border-emerald-400 hover:bg-slate-50 shadow-sm'
+                            : 'border-slate-200 hover:border-emerald-400 hover:bg-slate-50 shadow-sm cursor-pointer'
                     }
                 `}
             >
@@ -131,30 +134,39 @@ export default function ImportarDataAtencionPage() {
                     disabled={uploading}
                 />
                 
-                <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-                    {file ? (
-                        <div className="animate-in zoom-in duration-500">
-                            <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-sm">
-                                <FileSpreadsheet size={40}/>
-                            </div>
-                            <h3 className="text-xl font-black text-emerald-900 uppercase tracking-tight">{file.name}</h3>
-                            <p className="text-sm font-bold text-emerald-600 mt-1 uppercase tracking-widest">
-                                {(file.size / 1024).toFixed(2)} KB • Preparado para proceso
-                            </p>
+                {/* 🚀 LÓGICA SEPARADA PARA EVITAR ABRIR EL INPUT AL QUERER BORRAR */}
+                {file ? (
+                    <div className="animate-in zoom-in duration-500 flex flex-col items-center justify-center">
+                        <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-sm relative">
+                            <FileSpreadsheet size={40}/>
+                            {/* Botón flotante para eliminar el archivo */}
+                            {!uploading && (
+                                <button 
+                                    onClick={clearFile}
+                                    className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full hover:bg-rose-600 hover:scale-110 transition-all shadow-md"
+                                    title="Quitar archivo"
+                                >
+                                    <Trash2 size={14}/>
+                                </button>
+                            )}
                         </div>
-                    ) : (
-                        <>
-                            <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 text-slate-300">
-                                <FileText size={40}/>
-                            </div>
-                            <h3 className="text-lg font-black text-slate-700 uppercase tracking-tight">Seleccionar archivo local</h3>
-                            <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest leading-loose">
-                                .xlsx, .xls o .csv admitidos <br/>
-                                <span className="text-emerald-500">Detección inteligente de duplicados activada</span>
-                            </p>
-                        </>
-                    )}
-                </label>
+                        <h3 className="text-xl font-black text-emerald-900 uppercase tracking-tight">{file.name}</h3>
+                        <p className="text-sm font-bold text-emerald-600 mt-1 uppercase tracking-widest">
+                            {(file.size / 1024).toFixed(2)} KB • Preparado para proceso
+                        </p>
+                    </div>
+                ) : (
+                    <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
+                        <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 text-slate-300">
+                            <FileText size={40}/>
+                        </div>
+                        <h3 className="text-lg font-black text-slate-700 uppercase tracking-tight">Seleccionar archivo local</h3>
+                        <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest leading-loose">
+                            .xlsx, .xls o .csv admitidos <br/>
+                            <span className="text-emerald-500">Detección inteligente de duplicados activada</span>
+                        </p>
+                    </label>
+                )}
             </div>
 
             <div className="flex flex-col sm:flex-row justify-center mt-10 gap-4">

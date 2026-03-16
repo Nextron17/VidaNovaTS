@@ -5,8 +5,8 @@ import Link from "next/link";
 import { 
   Search, Filter, Activity, X, ChartPie,
   MessageCircle, Layers, Info, CheckCircle2,
-  Loader2, FileSpreadsheet, ChevronLeft, ChevronRight, Eye, Edit,
-  Calendar, Clock4, AlertCircle, FileText, Syringe, Stethoscope, FlaskConical, Scissors
+  Loader2, ChevronLeft, ChevronRight, Eye, Edit,
+  Calendar, AlertCircle, FileText, Syringe, Stethoscope, FlaskConical, Scissors
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, 
@@ -34,24 +34,17 @@ const MODALIDADES = [
   "Imagenología", "Laboratorio", "Clínica del Dolor", "Estancia", "Oncología"
 ];
 
-const CAC_GROUPS = [
-    "1= CAC Mama", "2= CAC Próstata", "3= CAC Cérvix", "4= CAC Colorectal", 
-    "5= CAC Estómago", "6= CAC Melanoma", "7= CAC Pulmón", 
-    "8= CAC Linfoma Hodgkin", "9= CAC Linfoma No Hodgkin", "10= CAC Leucemia"
-];
-
-// Colores Operativos: Azul, Celeste, Esmeralda, Ámbar
 const COLORS_OPERATIVOS = ['#3b82f6', '#0ea5e9', '#10b981', '#f59e0b']; 
 
 // --- HELPERS ---
 const getIconByModality = (modality: string) => {
     const m = (modality || '').toUpperCase();
-    if (m.includes('QUIMIO')) return <Syringe size={12}/>;
-    if (m.includes('RADIO') || m.includes('IMAGEN')) return <Activity size={12}/>;
-    if (m.includes('CONSULTA')) return <Stethoscope size={12}/>;
-    if (m.includes('LAB')) return <FlaskConical size={12}/>;
-    if (m.includes('CIRUGIA')) return <Scissors size={12}/>;
-    return <FileText size={12}/>;
+    if (m.includes('QUIMIO')) return <Syringe size={14}/>;
+    if (m.includes('RADIO') || m.includes('IMAGEN')) return <Activity size={14}/>;
+    if (m.includes('CONSULTA')) return <Stethoscope size={14}/>;
+    if (m.includes('LAB')) return <FlaskConical size={14}/>;
+    if (m.includes('CIRUGIA')) return <Scissors size={14}/>;
+    return <FileText size={14}/>;
 };
 
 const extractCohort = (obs: string) => {
@@ -84,6 +77,7 @@ export default function AtencionDashboardPage() {
   const [chartData, setChartData] = useState<any[]>([]);
   
   const [busqueda, setBusqueda] = useState("");
+  const [debouncedBusqueda, setDebouncedBusqueda] = useState(""); // 🚀 NUEVO: Evita el API Spam
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   
@@ -103,6 +97,14 @@ export default function AtencionDashboardPage() {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
+  // 🚀 LÓGICA DE DEBOUNCE: Espera 500ms después de que el usuario deja de escribir
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          setDebouncedBusqueda(busqueda);
+      }, 500);
+      return () => clearTimeout(timer);
+  }, [busqueda]);
+
   const seleccionarTodo = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) setSeleccionados(patients.map(c => c.id));
     else setSeleccionados([]);
@@ -116,15 +118,15 @@ export default function AtencionDashboardPage() {
     setLoading(true);
     try {
         const params: any = { page: page, limit: 10 };
-        if (busqueda) params.search = busqueda;
+        if (debouncedBusqueda) params.search = debouncedBusqueda; // Usa la búsqueda retrasada
         if (filtros.eps !== 'TODAS') params.eps = filtros.eps;
         if (filtros.fechaIni) params.startDate = filtros.fechaIni;
         if (filtros.fechaFin) params.endDate = filtros.fechaFin;
         if (filtros.cohorte.length > 0) params.cohorte = filtros.cohorte.join(','); 
+        
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
 
-        // 🔥 DOBLE PETICIÓN PARA ACTIVAR KPIs Y TABLA SIMULTÁNEAMENTE
         const [resData, resStats] = await Promise.all([
             api.get('/navegacion/patients', { params }),
             api.get('/navegacion/patients', { params: { ...params, onlyStats: 'true' } }) 
@@ -133,22 +135,16 @@ export default function AtencionDashboardPage() {
         const data = resData.data;
         const statsData = resStats.data;
 
-        // 1. LLENAR LA TABLA (Mapeo Seguro)
         if (data.success) {
             const rawData = data.data || [];
-            
             const mappedData = rawData.map((p: any) => {
                 const f = (p.followups && p.followups.length > 0) ? p.followups[0] : {}; 
-                
                 const fechaSolStr = f.dateRequest || p.createdAt || new Date().toISOString();
                 const fechaSol = new Date(fechaSolStr);
                 const hoy = new Date();
                 const dias = Math.ceil(Math.abs(hoy.getTime() - fechaSol.getTime()) / (1000 * 60 * 60 * 24)); 
 
-                // 🚀 EXTRAEMOS LA NOTA LIMPIA SIN DIAGNÓSTICOS PARA LA TABLA
                 const obsLimpia = (f.observation || "").split('|')[0].trim();
-                
-                // 🚀 LIMPIAMOS LA MODALIDAD PARA QUE NO MUESTRE "16= Otros tumores"
                 let modalidadLimpia = f.category || "PENDIENTE";
                 if (modalidadLimpia.includes("=") || modalidadLimpia.includes("CAC")) {
                     modalidadLimpia = "ONCOLOGÍA"; 
@@ -156,16 +152,14 @@ export default function AtencionDashboardPage() {
 
                 return {
                     id: p.id,
+                    patientId: p.id, // Asegura que el enlace al perfil funcione
                     paciente: `${p.firstName || ''} ${p.lastName || ''}`.trim() || "PACIENTE SIN NOMBRE",
                     doc: p.documentNumber || "S.N",
                     eps: p.insurance || "SIN EPS",
                     tel: p.phone || "---",
-                    
-                    // Datos Limpios
                     modalidad: modalidadLimpia,
                     cups: f.cups || "---",                
                     obs: obsLimpia || "-",
-                    
                     cohorte: extractCohort(f.observation), 
                     fecha_sol: f.dateRequest ? String(f.dateRequest).split('T')[0] : '---',
                     fecha_cita: f.dateAppointment ? String(f.dateAppointment).split('T')[0] : '---',
@@ -179,15 +173,18 @@ export default function AtencionDashboardPage() {
             setTotalPages(data.pagination?.totalPages || 1);
         }
 
-        // 2. LLENAR KPIs Y GRÁFICAS (Enciende los cuadros superiores)
         if (statsData.success && statsData.stats) {
             setStats(statsData.stats);
-            
             if (statsData.stats.topProcedures) {
-                const validStats = statsData.stats.topProcedures.filter((item: any) => 
+                // 🚀 MAPEO SEGURO PARA EL GRÁFICO (Soporta count o cantidad)
+                const safeStats = statsData.stats.topProcedures.map((item: any) => ({
+                    name: item.name,
+                    cantidad: item.cantidad || item.count || item.value || 0
+                }));
+                const validStats = safeStats.filter((item: any) => 
                     MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
                 );
-                setChartData(validStats.length > 0 ? validStats : statsData.stats.topProcedures);
+                setChartData(validStats.length > 0 ? validStats : safeStats);
             }
         }
 
@@ -196,7 +193,7 @@ export default function AtencionDashboardPage() {
     } finally {
         setLoading(false);
     }
-  }, [page, busqueda, tabEstado, filtros]);
+  }, [page, debouncedBusqueda, tabEstado, filtros]); // 🚀 Dependencia actualizada a debouncedBusqueda
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -385,13 +382,14 @@ export default function AtencionDashboardPage() {
                                 </div>
                             </td>
                             
-                            {/* 🚀 TRÁMITE Y COHORTE (Limpiado al estilo Django) */}
+                            {/* 🚀 TRÁMITE CON ICONO DINÁMICO */}
                             <td className="px-4 py-4">
-                                <div className="font-bold text-slate-700 text-xs uppercase tracking-tight">
-                                    {row.modalidad.includes('=') || row.modalidad.includes('CAC') ? 'ONCOLOGÍA' : row.modalidad}
+                                <div className="font-bold text-slate-700 text-xs uppercase tracking-tight flex items-center gap-1.5">
+                                    <span className="text-blue-500">{getIconByModality(row.modalidad)}</span>
+                                    <span>{row.modalidad.includes('=') || row.modalidad.includes('CAC') ? 'ONCOLOGÍA' : row.modalidad}</span>
                                 </div>
                                 {row.cups !== "---" && row.cups !== "SIN CUPS" && row.cups !== "N/A" && (
-                                    <div className="text-[11px] text-blue-600 font-mono font-bold mt-0.5">
+                                    <div className="text-[11px] text-slate-500 font-mono font-bold mt-0.5 ml-5">
                                         {row.cups}
                                     </div>
                                 )}

@@ -1,17 +1,16 @@
 import axios from 'axios';
 
 // ✅ Apuntamos a la URL de producción en Render (con process.env o fallback directo)
-//const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'https://vidanovadocker.onrender.com'}/api`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'https://vidanovadocker.onrender.com'}/api`;
 // ✅ Ahora apunta a tu backend local en el puerto 4000
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api`;
+//const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api`;
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
   timeout: 0, // Sin límite de tiempo (o ajústalo si es necesario) para procesos pesados
 });
 
-// --- INTERCEPTOR DE REQUEST (Enviar Token) ---
-api.interceptors.request.use(
+ api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
         const token = localStorage.getItem('token');
