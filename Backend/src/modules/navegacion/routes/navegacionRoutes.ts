@@ -33,7 +33,8 @@ router.delete(
 // Nota: La URL es /import y el campo del archivo debe llamarse 'file'
 router.post(
     '/patients/import', 
-    requireRoles(['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR']), 
+    // 🚀 AÑADIMOS 'ATENCION' Y 'NAVIGATOR' AL CANDADO
+    requireRoles(['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR', 'ATENCION', 'NAVIGATOR']), 
     upload.single('file'), 
     PatientController.importPatients
 );
@@ -124,8 +125,9 @@ router.post(
 
 router.post(
     '/cups/importar', 
-    requireRoles(['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR']), 
+    // 🚀 AÑADIMOS 'ATENCION' Y 'NAVIGATOR' AL CANDADO
+    requireRoles(['SUPER_ADMIN', 'COORDINATOR_NAVIGATOR', 'ATENCION', 'NAVIGATOR']), 
     upload.single('file'), 
     CupsController.importCupsFile
-);
+);  
 export default router;

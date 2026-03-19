@@ -232,10 +232,20 @@ export default function AdminDashboardPage() {
             setStats(statsData.stats); // Esto enciende los contadores
             
             if (statsData.stats.topProcedures) {
-                const validStats = statsData.stats.topProcedures.filter((item: any) => 
-                    MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
-                );
-                setChartData(validStats.length > 0 ? validStats : statsData.stats.topProcedures);
+                // 1. Forzamos a que 'cantidad' sea un NÚMERO real para que Recharts no falle.
+                const procesados = statsData.stats.topProcedures.map((item: any) => ({
+                    name: item.name || 'SIN DEFINIR',
+                    cantidad: Number(item.cantidad || 0) 
+                }));
+
+                // 2. Hacemos la comparación ignorando mayúsculas/minúsculas
+                const validStats = procesados.filter((item: any) => {
+                    const nombreBD = item.name.toUpperCase();
+                    return MODALIDADES.some(m => nombreBD.includes(m.toUpperCase()));
+                });
+
+                // 3. Asignamos los datos (si el filtro falla, mostramos los procesados originales)
+                setChartData(validStats.length > 0 ? validStats : procesados);
             }
         }
 

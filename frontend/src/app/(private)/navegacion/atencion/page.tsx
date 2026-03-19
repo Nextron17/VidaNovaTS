@@ -176,14 +176,18 @@ export default function AtencionDashboardPage() {
         if (statsData.success && statsData.stats) {
             setStats(statsData.stats);
             if (statsData.stats.topProcedures) {
-                // 🚀 MAPEO SEGURO PARA EL GRÁFICO (Soporta count o cantidad)
+                // 🚀 MAPEO SEGURO PARA EL GRÁFICO (Convertimos a número explícito)
                 const safeStats = statsData.stats.topProcedures.map((item: any) => ({
-                    name: item.name,
-                    cantidad: item.cantidad || item.count || item.value || 0
+                    name: item.name || 'SIN DEFINIR',
+                    cantidad: Number(item.cantidad || item.count || item.value || 0)
                 }));
-                const validStats = safeStats.filter((item: any) => 
-                    MODALIDADES.includes(item.name) || MODALIDADES.some(m => item.name.includes(m))
-                );
+                
+                // 🚀 FILTRO SEGURO IGNORANDO MAYÚSCULAS/MINÚSCULAS
+                const validStats = safeStats.filter((item: any) => {
+                    const nombreBD = String(item.name).toUpperCase();
+                    return MODALIDADES.some(m => nombreBD.includes(m.toUpperCase()));
+                });
+                
                 setChartData(validStats.length > 0 ? validStats : safeStats);
             }
         }
@@ -193,14 +197,15 @@ export default function AtencionDashboardPage() {
     } finally {
         setLoading(false);
     }
-  }, [page, debouncedBusqueda, tabEstado, filtros]); // 🚀 Dependencia actualizada a debouncedBusqueda
+  }, [page, debouncedBusqueda, tabEstado, filtros]); 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleMassUpdate = async () => {
     if (!massUpdateData.status && !massUpdateData.observation) return;
     try {
-        const res = await api.put('/patients/bulk-update', {
+        // 🚀 CORRECCIÓN DEL ENDPOINT (Faltaba /navegacion)
+        const res = await api.put('/navegacion/patients/bulk-update', {
             ids: seleccionados,
             status: massUpdateData.status,
             observation: massUpdateData.observation

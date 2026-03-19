@@ -347,9 +347,20 @@ export class ImportService {
                         const normalizedRow = Object.keys(row).reduce((acc, k) => { 
                             acc[ImportService.normalizeHeader(k)] = row[k]; return acc; 
                         }, {} as any);
+
+                        // 1. BÚSQUEDA EXACTA PRIMERO (Evita confusiones)
+                        for (const alias of mapKeys[key]) {
+                            if (normalizedRow[alias] !== undefined) return normalizedRow[alias];
+                        }
+
+                        // 2. BÚSQUEDA PARCIAL (Si la exacta falla)
                         for (const alias of mapKeys[key]) {
                             const foundKey = Object.keys(normalizedRow).find(k => k.includes(alias));
                             if (key === 'doc' && foundKey && foundKey.includes('tipo')) continue; 
+                            
+                            // 🛡️ Prevenir que 'estado' agarre 'estado_civil'
+                            if (key === 'estado_general' && foundKey && foundKey.includes('civil')) continue;
+                            
                             if (foundKey) return normalizedRow[foundKey];
                         }
                         return '';
@@ -435,7 +446,7 @@ export class ImportService {
                     const cups = ImportService.cleanText(getVal('cups'));
                     
                     // 🚀 ARREGLO PROCEDIMIENTO: Queda en PENDIENTE o CONSULTA para no ensuciar la tabla
-                    let category = 'PENDIENTE';
+                    let category = 'PENDIENTE'; // <-- AQUÍ
                     if (service.includes('CONSULTA') || cups.startsWith('890')) {
                         category = 'Consulta Externa';
                     }

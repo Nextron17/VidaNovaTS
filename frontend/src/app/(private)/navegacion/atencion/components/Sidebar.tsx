@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, UserPlus, 
   FolderOpen, Calendar, Settings, 
   LogOut, HeartHandshake, ChevronRight, 
-  FileSpreadsheet, FileText, Activity
+  FileSpreadsheet, FileText, Activity, HelpCircle
 } from 'lucide-react';
 import { useUser } from '@/src/app/context/UserContext';
 
@@ -41,7 +41,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             items: [
                 { name: 'Pacientes', href: `${basePath}/pacientes`, icon: Users },
                 { name: 'Nuevo Registro', href: `${basePath}/nuevo`, icon: UserPlus },
-                { name: 'Mis Casos', href: `${basePath}/casos`, icon: FolderOpen },
                 { name: 'Carga Masiva', href: `${basePath}/importar`, icon: FileSpreadsheet },
             ]
         },
@@ -49,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             label: "SISTEMA",
             items: [
                 { name: 'Bitácora', href: `${basePath}/bitacora`, icon: FileText },
+                { name: 'Ayuda', href: `${basePath}/ayuda`, icon: HelpCircle},
                 { name: 'Soporte', href: `${basePath}/soporte`, icon: Settings },
             ]
         }

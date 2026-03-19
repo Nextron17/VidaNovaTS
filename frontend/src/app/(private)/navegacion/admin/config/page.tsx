@@ -2,77 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  User, Lock, Users, HelpCircle, 
+  User, Lock, Users, 
   Camera, Save, Shield, Key, 
   Mail, Phone, MapPin,
   X, CheckCircle2,
-  ChevronRight, Loader2, Zap, ShieldCheck, AlertCircle, FileText, LifeBuoy, MessageCircle, Search, Trash2, Plus, BadgeCheck, Edit,
+  ChevronRight, Loader2, Zap, ShieldCheck, AlertCircle, FileText, MessageCircle, Search, Trash2, Plus, BadgeCheck, Edit,
 } from "lucide-react";
 import api from "@/src/app/services/api";
-
-// --- DATOS DE AYUDA TÉCNICA (FUNCIONALIDADES) ---
-const EXTENDED_FAQS = [
-    {
-        category: "📊 Torre de Control (Dashboard)",
-        items: [
-            { 
-                q: "¿Qué indicadores muestra la Torre de Control?", 
-                a: "La Torre de Control centraliza la operación en tiempo real. Muestra KPIs críticos: Total de Pacientes, Solicitudes Pendientes (sin gestión), Citas Agendadas y Casos Cerrados/Realizados. Además, visualiza la distribución de carga por aseguradora (EPS) y los procedimientos más solicitados del mes." 
-            },
-            { 
-                q: "¿Cómo funcionan los Filtros Inteligentes?", 
-                a: "El sistema permite segmentar la población por múltiples criterios simultáneos: Rango de Fechas, EPS, Estado de Gestión y, lo más importante, por Cohorte/Patología (ej: Ca. Mama, Ca. Próstata). Al seleccionar un filtro, todas las gráficas y la tabla de pacientes se recalculan instantáneamente." 
-            },
-            { 
-                q: "¿Para qué sirve la Acción Masiva?", 
-                a: "Permite gestionar múltiples pacientes a la vez. Selecciona varios registros en la tabla principal y usa el botón flotante 'Acción Masiva' para cambiar su estado (ej: pasar 10 pacientes a 'En Gestión') o agregar una nota de seguimiento idéntica a todos en un solo clic." 
-            },
-        ]
-    },
-    {
-        category: "🧭 Gestión de Navegación & Pacientes",
-        items: [
-            { 
-                q: "¿Qué es el Perfil 360 del Paciente?", 
-                a: "Es la hoja de vida digital del paciente oncológico. Contiene sus datos demográficos validados, información de contacto (con acceso directo a WhatsApp), y un historial cronológico (Línea de Tiempo) de todas las interacciones, notas, cambios de estado y servicios solicitados." 
-            },
-            { 
-                q: "¿Cómo registro un Nuevo Seguimiento?", 
-                a: "Desde el perfil del paciente, usa el botón 'Nuevo Evento'. Puedes registrar: Llamadas (contestadas/no contestadas), Gestión Administrativa (autorizaciones), Asignación de Citas o Notas Clínicas. Cada evento queda firmado con tu usuario y fecha hora exacta." 
-            },
-            { 
-                q: "¿Cómo se clasifican los servicios (CUPS)?", 
-                a: "El sistema cuenta con un motor inteligente que lee los códigos CUPS o descripciones de servicios y los clasifica automáticamente en modalidades visuales: Quimioterapia, Radioterapia, Cirugía, Imágenes, Laboratorio, etc. Esto facilita la lectura rápida del plan de manejo." 
-            },
-        ]
-    },
-    {
-        category: "📅 Agenda & Programación",
-        items: [
-            { 
-                q: "¿Cómo interpreto la Agenda Médica?", 
-                a: "La agenda muestra todas las citas programadas en un calendario interactivo. Cada cita tiene un código de color según su modalidad. Puedes cambiar entre vista Mensual, Semanal o Lista del día." 
-            },
-            { 
-                q: "¿El calendario se sincroniza con los pacientes?", 
-                a: "Sí. Cuando cambias el estado de un paciente a 'AGENDADO' y asignas una fecha en su perfil, este evento aparece automáticamente en la Agenda Médica." 
-            },
-        ]
-    },
-    {
-        category: "📂 Importación & Datos",
-        items: [
-            { 
-                q: "¿Cómo funciona la Importación Masiva?", 
-                a: "El módulo de importación permite cargar archivos Excel (.xlsx, .csv). El software valida la estructura, detecta duplicados, normaliza los servicios y crea automáticamente los pacientes nuevos en estado 'PENDIENTE'." 
-            },
-            { 
-                q: "¿Cómo descargo la Sábana de Datos?", 
-                a: "En el menú lateral, usa la opción 'Exportar' o 'Backup'. El sistema generará un archivo Excel maestro listo para auditoría." 
-            }
-        ]
-    }
-];
 
 // =========================================================
 // COMPONENTES UI REUTILIZABLES
@@ -113,7 +49,6 @@ export default function ConfigPage() {
   const [activeTab, setActiveTab] = useState("perfil");
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   // --- ESTADOS DE DATOS ---
   const [team, setTeam] = useState<any[]>([]); 
@@ -129,12 +64,11 @@ export default function ConfigPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null); 
   
-  // 🚀 AGREGAMOS EL CAMPO PHONE AL ESTADO INICIAL
   const [formData, setFormData] = useState({ 
     name: "", 
     documentNumber: "", 
     email: "", 
-    phone: "", // 👈 Nuevo campo
+    phone: "", 
     password: "", 
     role: "NAVIGATOR" 
   });
@@ -195,37 +129,31 @@ export default function ConfigPage() {
     finally { setIsLoading(false); }
   };
 
-  // 🚀 ABRIR MODAL PARA NUEVO USUARIO
   const handleOpenNewUser = () => {
       setEditingUser(null);
-      // Limpiamos también el teléfono
       setFormData({ name: "", documentNumber: "", email: "", phone: "", password: "", role: "NAVIGATOR" });
       setShowModal(true);
   };
 
-  // 🚀 ABRIR MODAL PARA EDITAR USUARIO
   const handleEditUser = (member: any) => {
       setEditingUser(member);
       setFormData({
           name: member.name || "",
           documentNumber: member.documentNumber || "",
           email: member.email || "",
-          phone: member.phone || "", // 👈 Cargamos el teléfono actual
+          phone: member.phone || "",
           password: "", 
           role: member.role || "NAVIGATOR"
       });
       setShowModal(true);
   };
 
-  // 🚀 GUARDAR (CREAR O ACTUALIZAR) USUARIO
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validación
     if (!formData.documentNumber || !formData.name) {
         return alert("El nombre y la cédula son obligatorios.");
     }
-    // Si es nuevo, la clave es obligatoria. Si está editando, es opcional.
     if (!editingUser && !formData.password) {
         return alert("La contraseña es obligatoria para un usuario nuevo.");
     }
@@ -233,23 +161,18 @@ export default function ConfigPage() {
     setIsLoading(true);
     try {
         if (editingUser) {
-            // Es una ACTUALIZACIÓN (PUT)
-            // 🚀 SOLUCIÓN TYPESCRIPT: Separamos la contraseña del resto de datos
             const { password, ...restData } = formData; 
-            
-            // Si hay contraseña, la enviamos. Si está vacía, solo enviamos el restData
             const payload = password ? { password, ...restData } : restData;
             
             await api.put(`/users/${editingUser.id}`, payload);
             alert("✅ Usuario actualizado exitosamente.");
         } else {
-            // Es una CREACIÓN (POST)
             await api.post("/users", formData);
             alert("✅ Usuario creado exitosamente.");
         }
         
         setShowModal(false);
-        fetchTeam(); // Recargar tabla
+        fetchTeam(); 
     } catch (error: any) { 
         alert(error.response?.data?.error || "Error al procesar la solicitud."); 
     } 
@@ -489,7 +412,6 @@ export default function ConfigPage() {
                                             )}
                                         </h3>
                                         <p className="text-sm text-slate-500 font-medium mb-1 truncate">{member.email}</p>
-                                        {/* Mostramos el teléfono si lo tiene */}
                                         <p className="text-xs text-slate-400 font-mono mb-1">{member.phone ? `📞 ${member.phone}` : "Sin teléfono"}</p>
                                         <p className="text-xs text-slate-400 font-mono mb-5">CC: {member.documentNumber}</p>
                                         
@@ -529,88 +451,6 @@ export default function ConfigPage() {
                 </div>
             );
 
-          case "ayuda":
-              return (
-                  <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
-                      <div className="text-center py-8">
-                          <div className="inline-flex items-center justify-center p-4 bg-indigo-50 text-indigo-600 rounded-2xl mb-4 shadow-sm">
-                              <LifeBuoy size={36} />
-                          </div>
-                          <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-4 tracking-tight">Manual de Funcionalidades</h2>
-                          <p className="text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed">
-                              Explora la documentación detallada sobre los módulos clave del sistema y aprende a sacar el máximo provecho de las herramientas.
-                          </p>
-                      </div>
-
-                      <div className="mb-10 relative group max-w-xl mx-auto">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                              <Search className="text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                          </div>
-                          <input 
-                              type="text" 
-                              placeholder="Buscar funcionalidad (ej: Importación, Filtros...)" 
-                              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl shadow-lg shadow-slate-200/30 text-slate-700 font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
-                          />
-                      </div>
-
-                      <div className="space-y-8">
-                          {EXTENDED_FAQS.map((section, idx) => (
-                              <div key={idx} className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
-                                  <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex items-center gap-3">
-                                      <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>
-                                      <h3 className="font-black text-slate-800 uppercase tracking-wide text-sm">{section.category}</h3>
-                                  </div>
-                                  <div className="divide-y divide-slate-100">
-                                      {section.items.map((item, i) => {
-                                          const uniqueId = idx * 100 + i;
-                                          const isOpen = expandedFaq === uniqueId;
-                                          return (
-                                              <div key={i} className={`group transition-all duration-300 ${isOpen ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}>
-                                                  <button 
-                                                      onClick={() => setExpandedFaq(isOpen ? null : uniqueId)} 
-                                                      className="w-full flex items-start justify-between p-6 text-left cursor-pointer focus:outline-none"
-                                                  >
-                                                      <div className="flex gap-4">
-                                                          <span className={`mt-0.5 min-w-[24px] flex items-center justify-center h-6 w-6 rounded-full text-xs font-bold transition-colors ${isOpen ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
-                                                              {i + 1}
-                                                          </span>
-                                                          <span className={`font-bold text-base transition-colors ${isOpen ? 'text-indigo-900' : 'text-slate-700'}`}>
-                                                              {item.q}
-                                                          </span>
-                                                      </div>
-                                                      <div className={`ml-4 transition-transform duration-300 ${isOpen ? 'rotate-180 text-indigo-600' : 'text-slate-300'}`}>
-                                                          <ChevronRight size={20} className="rotate-90"/>
-                                                      </div>
-                                                  </button>
-                                                  
-                                                  <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100 pb-6' : 'grid-rows-[0fr] opacity-0'}`}>
-                                                      <div className="overflow-hidden px-6 ml-10">
-                                                          <div className="text-sm text-slate-600 leading-7 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                                                              {item.a}
-                                                          </div>
-                                                      </div>
-                                                  </div>
-                                              </div>
-                                          );
-                                      })}
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      <div className="mt-12 text-center border-t border-slate-200 pt-8">
-                          <p className="text-slate-400 text-sm mb-4">¿Tienes un problema técnico no listado aquí?</p>
-                          <div className="flex justify-center gap-4">
-                              <a href="mailto:soporte@vidanova.com" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors shadow-sm">
-                                  <Mail size={16}/> soporte@vidanova.com
-                              </a>
-                              <a href="tel:+576028200000" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:text-emerald-600 hover:border-emerald-200 transition-colors shadow-sm">
-                                  <Phone size={16}/> (602) 820-0000
-                              </a>
-                          </div>
-                      </div>
-                  </div>
-              );
           default: return null;
       }
   };
@@ -628,8 +468,7 @@ export default function ConfigPage() {
               {[
                   { id: 'perfil', label: 'Mi Perfil', icon: User }, 
                   { id: 'seguridad', label: 'Seguridad', icon: Lock }, 
-                  { id: 'equipo', label: 'Equipo', icon: Users }, 
-                  { id: 'ayuda', label: 'Ayuda', icon: HelpCircle }
+                  { id: 'equipo', label: 'Equipo', icon: Users }
               ].map((tab) => (
                   <button 
                     key={tab.id} 
@@ -737,7 +576,6 @@ export default function ConfigPage() {
                               </div>
                           </div>
 
-                          {/* 🚀 AHORA EMAIL Y TELÉFONO COMPARTEN FILA DE FORMA ESTILIZADA */}
                           <div className="pt-2 mt-2 border-t border-slate-50/80 grid grid-cols-2 gap-4">
                               <InputField 
                                   label="Correo (Opcional)" 

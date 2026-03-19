@@ -50,126 +50,150 @@ export class PatientController {
         }
     }
 
-    // 2. LISTAR PACIENTES (Solo lectura - No requiere auditoría)
-   static getPatients = async (req: Request, res: Response) => {
-    try {
-        const { 
-            page = 1, limit = 10, search = '', eps = '', status = '', 
-            cohorte = '', startDate, endDate, onlyStats = 'false' 
-        } = req.query;
+// 2. LISTAR PACIENTES (ARREGLADO PARA PENDIENTES AUTOMÁTICOS)
+    static getPatients = async (req: Request, res: Response) => {
+        try {
+            const { 
+                page = 1, limit = 10, search = '', eps = '', status = '', 
+                cohorte = '', startDate, endDate, onlyStats = 'false' 
+            } = req.query;
 
-        // 🚀 MEJORA 1: SI SOLO SE PIDEN ESTADÍSTICAS (KPIs y Gráficas)
-        // Esto evita que las consultas pesadas se ejecuten en cada cambio de página.
-        if (onlyStats === 'true') {
-            const [total, pendientes, realizados, agendados, topProcedures] = await Promise.all([
-                Patient.count(),
-                FollowUp.count({ where: { status: 'PENDIENTE' } }),
-                FollowUp.count({ where: { status: 'REALIZADO' } }),
-                FollowUp.count({ where: { status: 'AGENDADO' } }),
-                FollowUp.findAll({
-                    attributes: [
-                        ['category', 'name'],
-                        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
-                    ],
-                    where: { category: { [Op.ne]: null } },
-                    group: ['category'],
-                    order: [[sequelize.literal('cantidad'), 'DESC']],
-                    limit: 7
-                })
-            ]);
+            // 🚀 MEJORA 1: ESTADÍSTICAS GLOBALES INTELIGENTES
+            if (onlyStats === 'true') {
+                const total = await Patient.count();
+                const realizados = await FollowUp.count({ where: { status: 'REALIZADO' } });
+                const agendados = await FollowUp.count({ where: { status: 'AGENDADO' } });
+                const enGestion = await FollowUp.count({ where: { status: 'EN_GESTION' } });
+                const cancelados = await FollowUp.count({ where: { status: 'CANCELADO' } });
 
-            return res.json({
-                success: true,
-                stats: { total, pendientes, realizados, agendados, topProcedures }
+                // 💡 PENDIENTES = Total de pacientes - (Los que ya tienen un estado diferente)
+                const pendientes = total - (realizados + agendados + enGestion + cancelados);
+
+                const topProcedures = await FollowUp.findAll({
+                attributes: [
+                    ['category', 'name'],
+                    [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+                ],
+                where: { category: { [Op.ne]: null } },
+                group: ['category'],
+                order: [[sequelize.literal('cantidad'), 'DESC']],
+                limit: 7,
+                raw: true // <--- ¡AÑADE ESTA LÍNEA! Es crucial para agregaciones (COUNT)
             });
-        }
 
-        // --- LÓGICA DE FILTRADO PARA LA TABLA ---
-        const offset = (Number(page) - 1) * Number(limit);
-        const patientWhere: any = {};
+                return res.json({
+                    success: true,
+                    stats: { total, pendientes, realizados, agendados, topProcedures }
+                });
+            }
 
-        if (eps && eps !== 'TODAS') {
-            patientWhere.insurance = { [Op.like]: `%${eps}%` };
-        }
+            // --- LÓGICA DE FILTRADO PARA LA TABLA ---
+            const offset = (Number(page) - 1) * Number(limit);
+            
+            const patientWhere: any = {};
+            const andConditions: any[] = []; 
 
-        if (search) {
-            patientWhere[Op.or] = [
-                { documentNumber: { [Op.like]: `%${search}%` } },
-                { firstName: { [Op.like]: `%${search}%` } },
-                { lastName: { [Op.like]: `%${search}%` } }
-            ];
-        }
+            if (eps && eps !== 'TODAS') {
+                andConditions.push({ insurance: { [Op.like]: `%${eps}%` } });
+            }
 
-        const followUpWhere: any = {};
-        let hasFollowUpFilters = false; 
-
-        if (status && status !== 'TODOS') {
-            followUpWhere.status = status;
-            hasFollowUpFilters = true;
-        }
-
-        if (startDate && endDate) {
-            followUpWhere.dateRequest = {
-                [Op.between]: [new Date(startDate as string), new Date(endDate as string)]
-            };
-            hasFollowUpFilters = true;
-        }
-
-        if (cohorte) {
-            const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
-            if (filtrosList.length > 0) {
-                followUpWhere[Op.or] = filtrosList.map(filtro => ({
+            if (search) {
+                // Convertimos la búsqueda a mayúsculas por si acaso (para evitar fallos por minúsculas)
+                const cleanSearch = String(search).toUpperCase();
+                andConditions.push({
                     [Op.or]: [
-                        { category: { [Op.like]: `%${filtro}%` } },
-                        { observation: { [Op.like]: `%${filtro}%` } }
+                        { documentNumber: { [Op.like]: `%${cleanSearch}%` } },
+                        { firstName: { [Op.like]: `%${cleanSearch}%` } },
+                        { lastName: { [Op.like]: `%${cleanSearch}%` } },
+                        // 👇 AÑADIMOS LOS CAMPOS DEL SEGUIMIENTO (CUPS, Servicio, Categoría y Notas)
+                        { '$followups.cups$': { [Op.like]: `%${cleanSearch}%` } },
+                        { '$followups.category$': { [Op.like]: `%${cleanSearch}%` } },
+                        { '$followups.serviceName$': { [Op.like]: `%${cleanSearch}%` } },
+                        { '$followups.observation$': { [Op.like]: `%${cleanSearch}%` } }
                     ]
-                }));
+                });
+            }
+
+            const followUpWhere: any = {};
+            let hasFollowUpFilters = false; 
+
+            // 🚀 MEJORA 2: INCLUIR PACIENTES NUEVOS COMO PENDIENTES
+            if (status === 'PENDIENTE') {
+                andConditions.push({
+                    [Op.or]: [
+                        { '$followups.status$': 'PENDIENTE' },
+                        { '$followups.id$': null } // Si no tiene FollowUp, es pendiente automáticamente
+                    ]
+                });
+            } else if (status && status !== 'TODOS') {
+                followUpWhere.status = status;
                 hasFollowUpFilters = true;
             }
+
+            if (andConditions.length > 0) {
+                patientWhere[Op.and] = andConditions;
+            }
+
+            if (startDate && endDate) {
+                followUpWhere.dateRequest = {
+                    [Op.between]: [new Date(startDate as string), new Date(endDate as string)]
+                };
+                hasFollowUpFilters = true;
+            }
+
+            if (cohorte) {
+                const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
+                if (filtrosList.length > 0) {
+                    followUpWhere[Op.or] = filtrosList.map(filtro => ({
+                        [Op.or]: [
+                            { category: { [Op.like]: `%${filtro}%` } },
+                            { observation: { [Op.like]: `%${filtro}%` } }
+                        ]
+                    }));
+                    hasFollowUpFilters = true;
+                }
+            }
+
+            // ⚠️ subQuery: false es OBLIGATORIO para que el filtro de PENDIENTES funcione sin errores SQL
+            const { count, rows } = await Patient.findAndCountAll({
+                where: patientWhere,
+                include: [{
+                    model: FollowUp,
+                    as: 'followups',
+                    required: hasFollowUpFilters, 
+                    where: hasFollowUpFilters ? followUpWhere : undefined,
+                }],
+                distinct: true,
+                limit: Number(limit),
+                offset: offset,
+                order: [['updatedAt', 'DESC']],
+                subQuery: false 
+            });
+
+            // Reordenar seguimientos en memoria
+            rows.forEach((p: any) => {
+                if (p.followups && p.followups.length > 0) {
+                    p.followups.sort((a: any, b: any) => 
+                        new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime()
+                    );
+                }
+            });
+
+            res.json({
+                success: true,
+                data: rows,
+                pagination: {
+                    total: count,
+                    totalPages: Math.ceil(count / Number(limit)),
+                    currentPage: Number(page)
+                }
+            });
+
+        } catch (error: any) {
+            console.error("❌ Error GET Patients:", error); 
+            res.status(500).json({ success: false, error: 'Error al consultar base de datos.' });
         }
-
-        // 🚀 MEJORA 2: CONSULTA DE DATOS LIGERA
-        // Usamos include optimizado y limitamos la respuesta.
-        const { count, rows } = await Patient.findAndCountAll({
-            where: patientWhere,
-            include: [{
-                model: FollowUp,
-                as: 'followups',
-                // Si tocas una pestaña, se vuelve obligatorio filtrar. 
-                // Si estás en "TODOS", trae a todos los pacientes.
-                required: hasFollowUpFilters, 
-                where: hasFollowUpFilters ? followUpWhere : undefined,
-            }],
-            distinct: true,
-            limit: Number(limit),
-            offset: offset,
-            order: [['updatedAt', 'DESC']]
-        });
-
-        // Reordenar seguimientos en memoria (solo los que vienen en la página)
-        rows.forEach((p: any) => {
-            if (p.followups && p.followups.length > 0) {
-                p.followups.sort((a: any, b: any) => 
-                    new Date(b.dateRequest).getTime() - new Date(a.dateRequest).getTime()
-                );
-            }
-        });
-
-        res.json({
-            success: true,
-            data: rows,
-            pagination: {
-                total: count,
-                totalPages: Math.ceil(count / Number(limit)),
-                currentPage: Number(page)
-            }
-        });
-
-    } catch (error: any) {
-        console.error("❌ Error GET Patients:", error); 
-        res.status(500).json({ success: false, error: 'Error al consultar base de datos.' });
     }
-}
 
     // 3. GESTIÓN MASIVA 
     static bulkUpdate = async (req: Request, res: Response) => {
