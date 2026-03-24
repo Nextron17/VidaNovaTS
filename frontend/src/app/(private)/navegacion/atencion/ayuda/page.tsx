@@ -5,10 +5,9 @@ import {
   Search, LifeBuoy, Mail, Phone, ChevronRight, 
   BookOpen, Activity, Users, Calendar, 
   FileSpreadsheet, ShieldAlert, Stethoscope,
-  ClipboardList, User // 👈 ¡Ícono User importado correctamente!
+  ClipboardList, User 
 } from "lucide-react";
 
-// --- BASE DE CONOCIMIENTO OPERATIVA (ROL ATENCIÓN) ---
 const EXTENDED_FAQS = [
     {
         category: "📊 Panel de Atención y Filtros",
@@ -337,7 +336,6 @@ export default function AyudaAtencionPage() {
                   </a>
               </div>
           </div>
-
       </div>
     </div>
   );

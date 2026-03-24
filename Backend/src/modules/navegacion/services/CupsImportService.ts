@@ -21,7 +21,6 @@ export class CupsImportService {
             let cupsToUpsert: any[] = [];
 
             for (const sheetName of workbook.SheetNames) {
-                // Solo leemos hojas que parezcan catálogos
                 if (['FICHA TECNICA', 'RESUMEN'].some(k => sheetName.toUpperCase().includes(k))) continue;
 
                 const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
@@ -69,9 +68,8 @@ export class CupsImportService {
                 throw new Error("No se encontraron registros válidos de CUPS en el archivo.");
             }
 
-            // 🚀 Inserción Masiva (Upsert: Crea si no existe, actualiza si existe)
             await MasterCUP.bulkCreate(cupsToUpsert, {
-                updateOnDuplicate: ['descripcion'], // Actualiza el nombre si ya existía
+                updateOnDuplicate: ['descripcion'], 
                 logging: false
             });
 
@@ -82,5 +80,5 @@ export class CupsImportService {
             console.error("❌ ERROR IMPORTANDO CUPS:", error);
             throw new Error(String(error.message));
         }
-    }
+    } 
 }
