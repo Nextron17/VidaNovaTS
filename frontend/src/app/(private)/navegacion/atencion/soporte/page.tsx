@@ -2,42 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  User, Lock, HelpCircle, Save, Key, 
-  Mail, Phone, MapPin, BadgeCheck, X, 
-  CheckCircle2, ChevronRight, Loader2, ShieldCheck, 
-  AlertCircle, LifeBuoy, MessageCircle, Globe, Camera
+  User, Lock, Save, Key, 
+  Mail, Phone, MapPin, BadgeCheck, 
+  CheckCircle2, Loader2, ShieldCheck, 
+  AlertCircle, Globe, Camera
 } from "lucide-react";
 import api from "@/src/app/services/api";
-
-// --- DOCUMENTACIÓN FUNCIONAL ---
-const EXTENDED_FAQS = [
-    {
-        category: "📊 Tablero de Atención",
-        items: [
-            { 
-                q: "¿Qué indicadores muestra mi Tablero?", 
-                a: "Muestra KPIs operativos en tiempo real: Casos Críticos (pendientes con más de 15 días), Citas Agendadas para hoy/semana, Gestiones Realizadas (casos cerrados) y Carga Total asignada a tu perfil." 
-            },
-            { 
-                q: "¿Cómo funcionan los Filtros de Cohorte?", 
-                a: "Puedes segmentar pacientes por patología (CAC Mama, CAC Cérvix, etc.) o por modalidad de servicio. Al seleccionar un filtro, la tabla se actualiza automáticamente." 
-            }
-        ]
-    },
-    {
-        category: "🧭 Gestión de Casos",
-        items: [
-            { 
-                q: "¿Qué es el Perfil 360 del Paciente?", 
-                a: "Es el expediente digital unificado. Incluye datos de contacto rápidos (WhatsApp), historial de notas cronológicas y el estado actual de cada trámite administrativo o clínico." 
-            },
-            { 
-                q: "¿Cómo registro una gestión?", 
-                a: "Dentro del perfil del paciente, usa el botón 'Gestionar'. Podrás asignar fechas de cita, registrar autorizaciones de EPS o escribir notas de seguimiento." 
-            }
-        ]
-    }
-];
 
 // --- COMPONENTE UI: INPUT OPTIMIZADO ---
 const InputField = ({ label, icon: Icon, value, onChange, type = "text", disabled = false, placeholder = "" }: any) => (
@@ -61,7 +31,6 @@ const InputField = ({ label, icon: Icon, value, onChange, type = "text", disable
 export default function ConfigAtencionPage() {
   const [activeTab, setActiveTab] = useState("perfil");
   const [isLoading, setIsLoading] = useState(false);
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const [profileData, setProfileData] = useState({ 
     name: "", phone: "", email: "", role: "", 
@@ -210,66 +179,6 @@ export default function ConfigAtencionPage() {
                   </div>
               );
 
-          case "ayuda":
-              return (
-                  <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <div className="text-center mb-12">
-                          <div className="inline-flex items-center justify-center p-5 bg-white text-emerald-600 rounded-[2.2rem] mb-6 shadow-sm border border-slate-100">
-                              <LifeBuoy size={40} />
-                          </div>
-                          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Manual Operativo</h2>
-                          <p className="text-slate-500 font-medium mt-2">Todo lo que necesitas saber para navegar en Vidanova.</p>
-                      </div>
-
-                      <div className="grid gap-6">
-                          {EXTENDED_FAQS.map((section, idx) => (
-                              <div key={idx} className="bg-white rounded-[2rem] border border-slate-200/50 shadow-sm overflow-hidden">
-                                  <div className="px-8 py-5 bg-slate-50/50 border-b border-slate-100">
-                                      <h3 className="font-bold text-slate-800 uppercase tracking-widest text-[11px] flex items-center gap-3">
-                                          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
-                                          {section.category}
-                                      </h3>
-                                  </div>
-                                  <div className="divide-y divide-slate-50">
-                                      {section.items.map((item, i) => {
-                                          const uniqueId = idx * 100 + i;
-                                          const isOpen = expandedFaq === uniqueId;
-                                          return (
-                                              <div key={i} className={`transition-all ${isOpen ? 'bg-emerald-50/10' : ''}`}>
-                                                  <button onClick={() => setExpandedFaq(isOpen ? null : uniqueId)} className="w-full flex items-center justify-between p-7 text-left hover:bg-slate-50/50 transition-colors">
-                                                      <span className={`font-bold text-sm ${isOpen ? 'text-emerald-900' : 'text-slate-700'}`}>{item.q}</span>
-                                                      <ChevronRight size={18} className={`transition-transform duration-300 ${isOpen ? 'rotate-90 text-emerald-600' : 'text-slate-300'}`}/>
-                                                  </button>
-                                                  {isOpen && (
-                                                      <div className="px-8 pb-8 animate-in slide-in-from-top-2">
-                                                          <div className="text-sm text-slate-600 leading-relaxed bg-white/60 p-5 rounded-2xl border border-emerald-100/50 font-medium">
-                                                              {item.a}
-                                                          </div>
-                                                      </div>
-                                                  )}
-                                              </div>
-                                          );
-                                      })}
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      <div className="mt-12 bg-slate-900 rounded-[2.5rem] p-10 text-center relative overflow-hidden shadow-2xl">
-                          <MessageCircle className="absolute -top-10 -right-10 opacity-5 text-white" size={200}/>
-                          <h4 className="text-white font-bold text-lg mb-2 relative z-10">¿Aún tienes dudas?</h4>
-                          <p className="text-slate-400 text-sm mb-8 relative z-10">Nuestro equipo técnico está listo para ayudarte.</p>
-                          <div className="flex flex-wrap justify-center gap-4 relative z-10">
-                              <a href="mailto:soporte@vidanova.com" className="flex items-center gap-3 px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl text-xs font-bold transition-all border border-white/10">
-                                  <Mail size={18} className="text-emerald-400"/> soporte@vidanova.com
-                              </a>
-                              <a href="tel:+576028200000" className="flex items-center gap-3 px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold transition-all">
-                                  <Phone size={18}/> Contacto Directo
-                              </a>
-                          </div>
-                      </div>
-                  </div>
-              );
           default: return null;
       }
   };
@@ -280,15 +189,14 @@ export default function ConfigAtencionPage() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
               <div>
                   <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">Configuración</h1>
-                  <p className="text-sm text-slate-500 font-medium">Perfil operativo y herramientas de soporte técnico.</p>
+                  <p className="text-sm text-slate-500 font-medium">Perfil operativo y herramientas de seguridad.</p>
               </div>
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-4 mb-10 no-scrollbar border-b border-slate-100">
               {[
                   { id: 'perfil', label: 'Mi Perfil', icon: User }, 
-                  { id: 'seguridad', label: 'Seguridad', icon: Lock }, 
-                  { id: 'ayuda', label: 'Soporte Técnico', icon: HelpCircle }
+                  { id: 'seguridad', label: 'Seguridad', icon: Lock }
               ].map((tab) => (
                   <button 
                     key={tab.id} 
