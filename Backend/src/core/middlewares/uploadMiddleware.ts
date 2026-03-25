@@ -1,13 +1,19 @@
 import multer from 'multer';
 
-// Usamos almacenamiento en memoria (RAM) porque ImportService 
-// procesa el archivo directamente sin necesidad de guardarlo en el disco duro.
+// Usar la memoria RAM temporalmente
 const storage = multer.memoryStorage();
 
-// Configuramos multer para que acepte solo archivos con el campo 'file'
 export const upload = multer({ 
     storage: storage,
     limits: {
-        fileSize: 99 * 1024 * 1024 // Límite de 99MB (suficiente para Excels gigantes)
+        fileSize: 10 * 1024 * 1024 // 🛡️ Límite estricto de 10 MB
+    },
+    fileFilter: (req, file, cb) => {
+        // 🛡️ Proteger que solo suban Excels o CSVs
+        if (file.mimetype.includes('excel') || file.mimetype.includes('spreadsheetml') || file.mimetype.includes('csv')) {
+            cb(null, true);
+        } else {
+            cb(new Error('FORMATO_INVALIDO: Solo se permiten archivos Excel (.xlsx, .xls) o CSV.'));
+        }
     }
 });

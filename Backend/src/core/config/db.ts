@@ -1,7 +1,6 @@
 import { Sequelize } from 'sequelize-typescript';
 import dotenv from 'dotenv';
 import colors from 'colors';
-import bcrypt from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 
 // 1. IMPORTACIÓN DE MODELOS
@@ -46,42 +45,18 @@ export const sequelize = new Sequelize({
             require: true, 
             rejectUnauthorized: false 
         },
-        statement_timeout: 900000, // 15 minutos de paciencia para procesos pesados
+        // ⏳ TIEMPO DE CONSULTA SQL: 1 HORA (3,600,000 ms) para proteger la importación masiva
+        statement_timeout: 3600000, 
         options: projectID ? `-c project=${projectID}` : undefined
     },
     pool: { 
         max: 20,         
         min: 5, 
-        acquire: 900000, 
+        // ⏳ TIEMPO DE ESPERA DE CONEXIÓN: 2 minutos (120,000 ms) para evitar caídas si hay muchos usuarios
+        acquire: 120000, 
         idle: 10000 
     }
 });
-
-// 🛡️ SEEDER AUTOMÁTICO: CREACIÓN DE ADMIN INICIAL SI LA DB ESTÁ VACÍA
-async function seedAdminUser() {
-    try {
-        const userCount = await User.count();
-        if (userCount === 0) {
-            console.log(colors.magenta('🗄️ Base de datos vacía: Generando Administrador del Sistema...'));
-            
-            const hashedPassword = await bcrypt.hash('admin123*', 10);
-            
-            await User.create({
-                name: 'Administrador VidaNova',
-                email: process.env.ADMIN_EMAIL || 'admin@vidanova.com',
-                documentNumber: '1061000000', 
-                password: hashedPassword,
-                role: 'SUPER_ADMIN',
-                status: 'online',
-                isActive: true
-            } as any);
-
-            console.log(colors.bgMagenta.white(' ✅ ADMIN CREADO: ID 1061000000 | Clave admin123* '));
-        }
-    } catch (e: any) { 
-        console.error(colors.red("❌ Error en el Seeder automático:"), e.message); 
-    }
-}
 
 // 4. FUNCIÓN DE INICIALIZACIÓN
 export async function connectDB() {
@@ -92,13 +67,12 @@ export async function connectDB() {
         await sequelize.authenticate();
         console.log(colors.green('✅ [SEQUELIZE] Conexión establecida con éxito.'));
         
-        // 🔄 Sincronización inteligente
-        // alter: true intenta ajustar las tablas existentes sin borrar datos
-        await sequelize.sync({ alter: true });
-        console.log(colors.green('✅ [DATABASE] Estructura de tablas sincronizada.'));
-
-        // Ejecutar Seeder si es necesario
-        await seedAdminUser();
+        // 🔄 Sincronización Inteligente
+        // Solo altera tablas si estás desarrollando. En producción, respeta los datos estrictamente.
+        const isDev = process.env.NODE_ENV === 'development';
+        await sequelize.sync({ alter: isDev });
+        
+        console.log(colors.green(`✅ [DATABASE] Modelos sincronizados (Modo: ${isDev ? 'Desarrollo' : 'Producción'}).`));
 
     } catch (error: any) {
         console.log(colors.bgRed.white('\n ⚠️ FALLO DE ENLACE DE DATOS '));

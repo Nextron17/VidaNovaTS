@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Patient } from '../models/Patient';
 import { FollowUp } from '../models/FollowUp';
 import ExcelJS from 'exceljs';
+import { getFechaLocal, getFechaYHoraLocal } from '../../../core/utils/dateUtils'; // 👈 Importación agregada
 
 export class BackupController {
 
@@ -44,6 +45,9 @@ export class BackupController {
 
             const patients = await Patient.findAll({ raw: true });
             
+            // Calculamos el offset de Colombia una sola vez para rendimiento
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+
             patients.forEach((p: any) => {
                 let age = '';
                 if (p.birthDate) {
@@ -51,10 +55,16 @@ export class BackupController {
                     age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25)).toString();
                 }
 
+                // Función auxiliar para forzar la fecha a UTC-5 (Colombia) en el Excel
+                const formatDateToColombia = (dateStr: string) => {
+                    if (!dateStr) return '';
+                    return new Date(new Date(dateStr).getTime() - tzoffset).toISOString().split('T')[0];
+                };
+
                 sheetPatients.addRow({
                     ...p,
                     age,
-                    birthDate: p.birthDate ? new Date(p.birthDate).toISOString().split('T')[0] : '',
+                    birthDate: formatDateToColombia(p.birthDate),
                     updatedAt: p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('es-CO') : ''
                 });
             });
@@ -89,6 +99,7 @@ export class BackupController {
                 { header: 'DIAGNÓSTICO (DX)', key: 'dx', width: 30 },
                 { header: 'TIPO CASO', key: 'tipoCaso', width: 15 },
                 { header: 'RESPONSABLE', key: 'responsable', width: 20 },
+                { header: 'BARRERA DETECTADA', key: 'barrera', width: 25 }, // 👈 Añadí la barrera aquí por si acaso
                 
                 // OBSERVACIONES
                 { header: 'OBSERVACIÓN LIMPIA', key: 'obsClean', width: 50 },
@@ -98,7 +109,7 @@ export class BackupController {
             // Estilo Cabecera Hoja 2 (Verde Reporte)
             sheetHistory.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
             sheetHistory.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
-            sheetHistory.autoFilter = { from: 'A1', to: 'R1' };
+            sheetHistory.autoFilter = { from: 'A1', to: 'S1' };
 
             const history = await FollowUp.findAll({
                 include: [{
@@ -109,12 +120,18 @@ export class BackupController {
                 order: [['dateRequest', 'DESC']]
             });
 
+            // Reutilizamos el offset
+            const tzoffsetHistory = (new Date()).getTimezoneOffset() * 60000;
+            const formatDateToColombia = (dateStr: string) => {
+                if (!dateStr) return '';
+                return new Date(new Date(dateStr).getTime() - tzoffsetHistory).toISOString().split('T')[0];
+            };
+
             history.forEach((h: any) => {
                 const pat = h.patient;
                 const fullObs = h.observation || '';
 
                 // --- HELPER PARA EXTRAER DATOS OCULTOS ---
-                // Saca info como "Juan Perez" de "| PROF: Juan Perez |"
                 const extract = (tag: string) => {
                     const regex = new RegExp(`\\|\\s*${tag}:\\s*([^|]+)`, 'i');
                     const match = fullObs.match(regex);
@@ -127,8 +144,8 @@ export class BackupController {
                 const row = sheetHistory.addRow({
                     id: h.id,
                     status: h.status ? h.status.replace('_', ' ') : 'PENDIENTE',
-                    dateRequest: h.dateRequest ? new Date(h.dateRequest).toISOString().split('T')[0] : '',
-                    dateAppointment: h.dateAppointment ? new Date(h.dateAppointment).toISOString().split('T')[0] : '',
+                    dateRequest: formatDateToColombia(h.dateRequest), // 👈 Fechas corregidas
+                    dateAppointment: formatDateToColombia(h.dateAppointment), // 👈 Fechas corregidas
                     
                     docPatient: pat ? pat.documentNumber : '',
                     namePatient: pat ? `${pat.firstName} ${pat.lastName}`.trim() : '---',
@@ -145,7 +162,8 @@ export class BackupController {
                     lugar: extract('LUGAR'),
                     dx: extract('DX') || extract('DX SUGERIDO'), 
                     tipoCaso: extract('TIPO'),
-                    responsable: extract('RESP'),
+                    responsable: extract('RESP') || extract('GESTOR'),
+                    barrera: extract('BARRERA'), 
                     
                     obsClean: cleanObs,
                     obsFull: fullObs
@@ -167,8 +185,8 @@ export class BackupController {
                 }
             });
 
-            // 4. Descargar
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            // 4. Descargar con nombre de archivo sincronizado a Colombia
+            const timestamp = getFechaYHoraLocal().replace(/[: ]/g, '-'); // Usamos nuestra nueva función 👈
             const fileName = `Vidanova_Reporte_Maestro_${timestamp}.xlsx`;
 
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, FileText, Info, Loader2 
+  AlertCircle, FileText, Info, Loader2, Trash2
 } from "lucide-react";
 import api from "@/src/app/services/api";
 
@@ -16,7 +16,6 @@ export default function ImportarDataPage() {
   const [uploading, setUploading] = useState(false);
   const router = useRouter();
 
-  // Asegurar renderizado solo en cliente para evitar errores de hidratación
   useEffect(() => { setIsClient(true); }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -33,7 +32,6 @@ export default function ImportarDataPage() {
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      // Validación básica de extensión
       if (droppedFile.name.match(/\.(xlsx|xls|csv)$/)) {
         setFile(droppedFile);
       } else {
@@ -48,41 +46,35 @@ export default function ImportarDataPage() {
     }
   };
 
-  // --- 🚀 NÚCLEO DE SUBIDA MASIVA ESCALABLE ---
+  const clearFile = (e: React.MouseEvent) => {
+      e.preventDefault();
+      setFile(null);
+  };
+
+  // --- 🚀 NÚCLEO DE SUBIDA MASIVA EN SEGUNDO PLANO ---
   const handleUpload = async () => {
     if (!file) return;
 
     setUploading(true);
     const formData = new FormData();
-    formData.append("file", file); // El nombre "file" debe coincidir con el backend
+    formData.append("file", file);
 
     try {
-      /**
-       * 🛡️ ESTRATEGIA ANTI-CRASH:
-       * Configuramos Axios con timeout: 0 (infinito). 
-       * Esto permite que si el servidor tarda minutos procesando miles de filas
-       * en lotes de 100, el navegador no corte la conexión ("Network Error").
-       */
+      // 🛡️ Al usar segundo plano, ya no necesitamos el timeout: 0
+      // porque el servidor responderá en 1 segundo.
       const res = await api.post("/navegacion/patients/import", formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 0, 
       });
 
       if (res.data.success) {
-        // Obtenemos los contadores del ImportService
-        const stats = res.data.details;
-        
+        // 🚀 ALERTA DE PROCESO EN SEGUNDO PLANO
         alert(
-          `✅ ¡IMPORTACIÓN COMPLETADA EXITOSAMENTE!\n\n` +
-          `• Pacientes Nuevos: ${stats.createdPatients || 0}\n` +
-          `• Registros Actualizados: ${stats.updatedPatients || 0}\n` +
-          `• Citas/Seguimientos: ${stats.createdFollowUps || 0}\n` +
-          `• Errores en filas: ${stats.errors || 0}\n\n` +
-          `La base de datos se ha sincronizado correctamente.`
+          `✅ ¡ARCHIVO RECIBIDO CON ÉXITO!\n\n` +
+          `El motor inteligente está procesando los datos en segundo plano para no bloquear tu pantalla.\n\n` +
+          `Puedes ir al Directorio y verás cómo los pacientes van apareciendo o actualizándose en los próximos minutos.`
         );
         
         setFile(null);
-        // Redirigir al dashboard para ver los cambios
         router.push("/navegacion/admin"); 
         router.refresh(); 
       } else {
@@ -91,7 +83,7 @@ export default function ImportarDataPage() {
 
     } catch (error: any) {
       console.error("❌ Error en la carga masiva:", error);
-      const errorMessage = error.response?.data?.error || "Error de red: El servidor local tardó demasiado o el archivo bloqueó el hilo principal.";
+      const errorMessage = error.response?.data?.error || "Error de red al enviar el archivo.";
       alert(`❌ ERROR DE IMPORTACIÓN:\n${errorMessage}`);
     } finally {
       setUploading(false);
@@ -121,7 +113,7 @@ export default function ImportarDataPage() {
                 <UploadCloud size={40} />
             </div>
             <h2 className="text-xl font-bold">Cargador de Inteligencia de Datos</h2>
-            <p className="text-blue-100/80 text-sm mt-1">Arrastra el reporte consolidado para iniciar el proceso.</p>
+            <p className="text-blue-100/80 text-sm mt-1">Procesamiento en segundo plano (Anti-Timeouts).</p>
         </div>
 
         <div className="p-10">
@@ -135,42 +127,49 @@ export default function ImportarDataPage() {
                         ? 'border-blue-500 bg-blue-50/50 scale-[1.01] shadow-inner' 
                         : file 
                             ? 'border-emerald-500 bg-emerald-50/30'
-                            : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50/50'
+                            : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50/50 cursor-pointer'
                     }
                 `}
             >
                 <input 
                     type="file" 
-                    id="fileInput" 
+                    id="fileInputAdmin" 
                     className="hidden" 
                     accept=".xlsx,.xls,.csv"
                     onChange={handleFileChange}
                     disabled={uploading}
                 />
                 
-                <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-                    {file ? (
-                        <div className="animate-in fade-in zoom-in duration-300">
-                            <div className="mx-auto w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                              <FileSpreadsheet size={32} />
-                            </div>
-                            <h3 className="text-xl font-black text-emerald-800">{file.name}</h3>
-                            <p className="text-sm font-bold text-emerald-600/70 mt-1">
-                              {(file.size / 1024).toFixed(2)} KB • Archivo validado y listo
-                            </p>
+                {file ? (
+                    <div className="animate-in fade-in zoom-in duration-300 relative flex flex-col items-center justify-center">
+                        <div className="mx-auto w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4 relative">
+                          <FileSpreadsheet size={32} />
+                          {!uploading && (
+                              <button 
+                                  onClick={clearFile}
+                                  className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full hover:bg-rose-600 hover:scale-110 transition-all shadow-md"
+                                  title="Quitar archivo"
+                              >
+                                  <Trash2 size={14}/>
+                              </button>
+                          )}
                         </div>
-                    ) : (
-                        <>
-                            <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4 group-hover:text-blue-400 transition-colors">
-                              <FileText size={32} />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-700">Selecciona el archivo maestro</h3>
-                            <p className="text-sm text-slate-400 mt-2 max-w-xs mx-auto">
-                              Soporta múltiples hojas. El sistema normaliza automáticamente nombres y documentos.
-                            </p>
-                        </>
-                    )}
-                </label>
+                        <h3 className="text-xl font-black text-emerald-800">{file.name}</h3>
+                        <p className="text-sm font-bold text-emerald-600/70 mt-1">
+                          {(file.size / 1024).toFixed(2)} KB • Archivo validado y listo
+                        </p>
+                    </div>
+                ) : (
+                    <label htmlFor="fileInputAdmin" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
+                        <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4 group-hover:text-blue-400 transition-colors">
+                          <FileText size={32} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-700">Selecciona el archivo maestro</h3>
+                        <p className="text-sm text-slate-400 mt-2 max-w-xs mx-auto">
+                          Soporta múltiples hojas. El sistema normaliza automáticamente nombres y documentos.
+                        </p>
+                    </label>
+                )}
             </div>
 
             <div className="flex flex-col sm:flex-row justify-center mt-10 gap-4">
@@ -186,13 +185,13 @@ export default function ImportarDataPage() {
                         <>
                             <Loader2 size={20} className="animate-spin text-blue-400"/> 
                             <div className="flex flex-col items-start leading-tight text-left">
-                              <span className="text-sm">Procesando Base de Datos...</span>
-                              <span className="text-[10px] font-medium text-slate-400">Esto puede tardar unos minutos</span>
+                              <span className="text-sm">Enviando al Servidor...</span>
+                              <span className="text-[10px] font-medium text-slate-400">Por favor, espera unos segundos.</span>
                             </div>
                         </>
                     ) : (
                         <>
-                            <CheckCircle2 size={20}/> Ejecutar Importación Masiva
+                            <CheckCircle2 size={20}/> Iniciar Carga Masiva
                         </>
                     )}
                 </button>
@@ -204,11 +203,11 @@ export default function ImportarDataPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100/50">
           <h4 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
-              <Info size={18}/> Motor de Integridad
+              <Info size={18}/> Motor en Segundo Plano
           </h4>
           <ul className="space-y-2 text-xs text-blue-800/70 font-medium">
-              <li>• Procesamiento por lotes (Chunks de 100) para evitar saturación.</li>
-              <li>• Sanitización XSS automática en cada campo de texto.</li>
+              <li>• Adiós caídas: El servidor procesará la data en la sombra.</li>
+              <li>• Puedes seguir usando la plataforma mientras se cargan los pacientes.</li>
               <li>• Normalización de tipos de documento (CC, TI, CE, etc).</li>
           </ul>
         </div>
@@ -226,20 +225,4 @@ export default function ImportarDataPage() {
       </div>
     </div>
   );
-}
-
-// Sub-componente de ayuda visual
-function ColumnItem({ label, required }: { label: string, required?: boolean }) {
-    return (
-        <div className="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
-            {required ? (
-                <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0"/>
-            ) : (
-                <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 flex-shrink-0" />
-            )}
-            <span className={required ? "font-bold text-slate-700" : "text-slate-400"}>
-                {label}
-            </span>
-        </div>
-    );
 }

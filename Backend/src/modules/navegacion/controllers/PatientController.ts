@@ -11,42 +11,56 @@ import { AuditLog } from '../../../core/models/AuditLog';
 
 export class PatientController {
 
-    // 1. IMPORTACIÓN MASIVA (EXCEL/CSV) CON BLINDAJE
+    // 1. IMPORTACIÓN MASIVA (EN SEGUNDO PLANO)
     static importPatients = async (req: Request, res: Response) => {
         try {
             if (!req.file) {
                 return res.status(400).json({ 
                     success: false, 
-                    error: 'Falta archivo para procesar o el formato/peso no es válido.' 
+                    error: 'Falta archivo para procesar o el formato no es válido.' 
                 });
             }
             
-            const result = await ImportService.processPatientExcel(req.file.buffer);
-            
-            // 🕵️‍♂️ AUDITORÍA: Registro de importación masiva
+            // 1. CLONAMOS LA MEMORIA: Guardamos el archivo y los datos del usuario 
+            // antes de cerrar la conexión HTTP.
+            const fileBuffer = Buffer.from(req.file.buffer);
             const operatorId = req.user?.id;
-            if (operatorId) {
-                await AuditLog.create({
-                    userId: operatorId,
-                    action: 'IMPORT',
-                    tableName: 'Patients/FollowUps',
-                    recordId: 'MASIVO',
-                    oldValues: null,
-                    newValues: { sheetsProcessed: result.createdPatients, updates: result.updatedPatients }
-                });
-            }
 
-            res.json({ 
+            // 2. RESPUESTA INMEDIATA (202 Accepted): Le decimos al Frontend que todo está bien 
+            // ANTES de procesar las miles de filas.
+            res.status(202).json({ 
                 success: true,
-                message: 'Proceso de importación finalizado', 
-                details: result 
+                message: 'Archivo recibido correctamente. El sistema está procesando los datos en segundo plano.', 
             });
+
+            // 3. PROCESAMIENTO ASÍNCRONO ("Fire and Forget")
+            // Esto se ejecuta en la sombra sin bloquear a nadie.
+            setTimeout(async () => {
+                try {
+                    console.log("⚙️ [BACKGROUND TASK] Iniciando procesamiento de Excel...");
+                    const result = await ImportService.processPatientExcel(fileBuffer);
+                    
+                    // 🕵️‍♂️ AUDITORÍA: Registro de importación masiva al terminar
+                    if (operatorId) {
+                        await AuditLog.create({
+                            userId: operatorId,
+                            action: 'IMPORT',
+                            tableName: 'Patients/FollowUps',
+                            recordId: 'MASIVO',
+                            oldValues: null,
+                            newValues: { sheetsProcessed: result.createdPatients, updates: result.updatedPatients }
+                        });
+                    }
+                    console.log("✅ [BACKGROUND TASK] Importación finalizada con éxito.");
+                } catch (bgError) {
+                    console.error("❌ [BACKGROUND TASK] Error procesando Excel:", bgError);
+                    // Aquí podrías agregar lógica para enviar un email al admin avisando del error
+                }
+            }, 0);
+
         } catch (error: any) {
-            console.error("❌ Error Importando:", error);
-            if (error.message && error.message.includes('FORMATO_INVALIDO')) {
-                return res.status(400).json({ success: false, error: error.message });
-            }
-            res.status(500).json({ success: false, error: 'Error interno al procesar el archivo.' });
+            console.error("❌ Error recibiendo archivo:", error);
+            res.status(500).json({ success: false, error: 'Error interno al recibir el archivo.' });
         }
     }
 
@@ -70,20 +84,46 @@ export class PatientController {
                 const pendientes = total - (realizados + agendados + enGestion + cancelados);
 
                 const topProcedures = await FollowUp.findAll({
-                attributes: [
-                    ['category', 'name'],
-                    [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
-                ],
-                where: { category: { [Op.ne]: null } },
-                group: ['category'],
-                order: [[sequelize.literal('cantidad'), 'DESC']],
-                limit: 7,
-                raw: true // <--- ¡AÑADE ESTA LÍNEA! Es crucial para agregaciones (COUNT)
-            });
+                    attributes: [
+                        ['category', 'name'],
+                        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+                    ],
+                    where: { category: { [Op.ne]: null } },
+                    group: ['category'],
+                    order: [[sequelize.literal('cantidad'), 'DESC']],
+                    limit: 7,
+                    raw: true // Crucial para agregaciones
+                });
+
+                // 1. Traemos solo las observaciones que contienen la palabra BARRERA
+                const followUpsConBarrera = await FollowUp.findAll({
+                    attributes: ['observation'],
+                    where: { observation: { [Op.like]: '%BARRERA:%' } },
+                    raw: true
+                });
+
+                // 2. Extraemos y contamos (omitiendo "Ninguna")
+                const conteoBarreras: Record<string, number> = {};
+                followUpsConBarrera.forEach((f: any) => {
+                    const match = f.observation?.match(/BARRERA:\s*([^|]+)/i);
+                    if (match) {
+                        const barrera = match[1].trim();
+                        // Ignoramos si la barrera es "Ninguna" o "NO"
+                        if (barrera && !['NINGUNA / SIN BARRERA', 'NO', 'NINGUNA'].includes(barrera.toUpperCase())) {
+                            conteoBarreras[barrera] = (conteoBarreras[barrera] || 0) + 1;
+                        }
+                    }
+                });
+
+                // 3. Convertimos a formato Recharts, ordenamos y sacamos el Top 5
+                const topBarreras = Object.entries(conteoBarreras)
+                    .map(([name, cantidad]) => ({ name, cantidad }))
+                    .sort((a, b) => b.cantidad - a.cantidad)
+                    .slice(0, 5);
 
                 return res.json({
                     success: true,
-                    stats: { total, pendientes, realizados, agendados, topProcedures }
+                    stats: { total, pendientes, realizados, agendados, topProcedures, topBarreras } // 👈 topBarreras añadido aquí
                 });
             }
 
@@ -361,7 +401,16 @@ export class PatientController {
             const exists = await Patient.findOne({ where: { documentNumber: req.body.documentNumber } });
             if (exists) return res.status(400).json({ success: false, error: 'Ya existe.' });
             
-            const newPatient = await Patient.create(req.body);
+            // En lugar de Patient.create(req.body), haz esto:
+                const { 
+                    documentType, documentNumber, firstName, lastName, 
+                    phone, email, insurance, city, department, gender, birthDate, status 
+                } = req.body;
+
+                const newPatient = await Patient.create({
+                    documentType, documentNumber, firstName, lastName, 
+                    phone, email, insurance, city, department, gender, birthDate, status
+                });
 
             // 🕵️‍♂️ AUDITORÍA: Creación Manual
             if (operatorId) {

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import xss from 'xss'; // 🛡️ 1. IMPORTACIÓN DEL ESCUDO ANTI-XSS
+import xss from 'xss';
 import { Patient } from '../models/Patient';
 import { FollowUp } from '../models/FollowUp';
 import { sequelize } from '../../../core/config/db';
@@ -27,7 +27,6 @@ export class ImportService {
         if (!id) return true;
         const text = String(id).toUpperCase().replace(/\s/g, ''); 
         
-        // 1. EL ESCUDO ANTI-BASURA (Tu lista original completa)
         const forbiddenWords = [
             'CEDULA', 'TARJETA', 'REGISTRO', 'CIVIL', 'NACIMIENTO', 'IDENTIDAD',
             'PERMISO', 'ESPECIAL', 'PERMANENCIA', 'PEP', 'PASAPORTE', 'ADULTO',
@@ -36,37 +35,30 @@ export class ImportService {
             'TOTAL', 'SUBTOTAL', 'PAGINA', 'HOJA'
         ];
         
-        // Si el texto tiene alguna de estas palabras, es basura garantizada (ej. un encabezado colado)
         if (forbiddenWords.some(word => text.includes(word))) return true;
         
         const letterCount = text.replace(/[^A-Z]/g, '').length;
         const numberCount = text.replace(/[^0-9]/g, '').length;
         
-        // 2. Si no tiene ni un solo número, es imposible que sea un documento
         if (numberCount === 0) return true; 
-
-        // 3. EXCEPCIÓN DE SEGURIDAD: Si tiene 5 números o más y ya pasó el filtro de palabras, 
-        // asumimos que es un documento real (incluso si trae alguna letra rara al inicio como "PA123456")
         if (numberCount >= 5) return false;
-        
-        // 4. Tu regla original para textos cortos confusos
         if (letterCount > 3 && letterCount > numberCount) return true;
         
         return false;
     }
 
-    // 🛡️ 2. EL CUELLO DE BOTELLA SANITIZADO
     private static cleanText(val: any): string {
         if (!val) return '';
         let str = String(val).trim();
         
-        // 🚨 MAGIA AQUÍ: xss() intercepta el texto y destruye cualquier etiqueta 
-        // <script>, <iframe>, o evento de javascript onmouseover="..." antes de que pase al sistema.
+        // 🛡️ XSS Protection
         str = xss(str); 
 
-        if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
-        str = str.replace(/(\r\n|\n|\r)/gm, " "); 
+        // Unimos los saltos de línea (enters) de las historias clínicas en un solo texto continuo
+        str = str.replace(/(\r\n|\n|\r)/gm, " // "); 
         str = str.replace(/\s\s+/g, ' '); 
+        
+        if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
         return str.toUpperCase();
     }
 
@@ -83,7 +75,7 @@ export class ImportService {
         const parts = str.split('|');
         const validNumbers: string[] = [];
         for (let part of parts) {
-            let num = part.replace(/[^0-9]/g, ''); // 🛡️ Naturalmente seguro contra XSS porque elimina letras
+            let num = part.replace(/[^0-9]/g, '');
             if (num.startsWith('57') && num.length >= 12) num = num.substring(2); 
             if (part.includes('E+')) num = ''; 
             if (num.length >= 7 && !validNumbers.includes(num)) validNumbers.push(num);
@@ -105,18 +97,12 @@ export class ImportService {
         let date: Date | null = null;
         
         try {
-            // 1. Si es formato serial de Excel (número)
             if (typeof val === 'number' && val > 20000 && val < 60000) {
                 return new Date(Math.round((val - 25569) * 86400 * 1000) + (5 * 3600 * 1000));
             } 
             
-            // 2. Si es String (como viene en tu CSV)
             let str = String(val).trim().replace(/"/g, '');
-            
-            // Separar la fecha de la hora si existe (ej: "16/02/2026 16:42:00")
             const datePart = str.split(' ')[0]; 
-            
-            // Reemplazar guiones por slashes para estandarizar
             const normalizedDatePart = datePart.replace(/-/g, '/');
             const parts = normalizedDatePart.split('/');
             
@@ -125,18 +111,15 @@ export class ImportService {
                 const p1 = parseInt(parts[1], 10);
                 const p2 = parseInt(parts[2], 10);
                 
-                // Determinar si es DD/MM/YYYY o YYYY/MM/DD
                 if (parts[0].length === 4) {
                     date = new Date(p0, p1 - 1, p2); 
                 } else if (parts[2].length === 4) {
                     date = new Date(p2, p1 - 1, p0); 
                 }
             } else if (str.includes('T')) {
-                // Formato ISO
                 date = new Date(str);
             }
 
-            // Validar que la fecha sea lógica
             if (date && !isNaN(date.getTime())) {
                 if (date.getFullYear() < 1900 || date.getFullYear() > 2100) return null;
                 return date;
@@ -147,11 +130,8 @@ export class ImportService {
         return null;
     }
 
-    
     // 2. MOTOR DE DIAGNÓSTICOS HÍBRIDO
     
-    
-    // Método principal: Busca por código CIE-10
     private static getCohortFromCie10(code: any): string | null {
         if (!code) return null;
         const c = String(code).toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -185,7 +165,6 @@ export class ImportService {
         return null;
     }
 
-    // Método de Respaldo: Busca por descripción de texto
     private static getCohortFromText(text: string): string | null {
         if (!text) return null;
         const t = text.toUpperCase();
@@ -205,63 +184,89 @@ export class ImportService {
     }
 
     
-    // 3. LECTOR CSV MANUAL (FALLBACK)
-    
-    private static splitCSVRow(row: string, delimiter: string = ';'): string[] {
-        const matches = [];
-        let current = '';
-        let inQuotes = false;
-        for (let i = 0; i < row.length; i++) {
-            const char = row[i];
-            if (char === '"') inQuotes = !inQuotes; 
-            else if (char === delimiter && !inQuotes) { matches.push(current); current = ''; } 
-            else current += char;
-        }
-        matches.push(current); 
-        return matches;
-    }
-
+    // 🚀 NUEVO: LECTOR CSV MANUAL MULTILÍNEA ROBUSTO
+    // Evita que los Enter (saltos de línea) en las Historias Clínicas rompan la tabla
     private static parseManualCSV(buffer: Buffer): any[] {
-        console.log("⚠️ Activando Lector Manual CSV Avanzado...");
-        const text = buffer.toString('binary'); 
-        const lines = text.split(/\r?\n/);
-        if (lines.length < 2) return [];
+        console.log("⚠️ Activando Lector Manual CSV Robusto (Soporte para Historias Clínicas Multilínea)...");
+        
+        let text = buffer.toString('utf-8');
+        if (text.indexOf('') !== -1 || text.indexOf('Ã') !== -1) {
+            text = buffer.toString('latin1');
+        }
+
+        const rows: string[][] = [];
+        let currentRow: string[] = [];
+        let currentCell = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const nextChar = text[i + 1];
+            
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    currentCell += '"'; // Comilla escapada
+                    i++; 
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ';' && !inQuotes) {
+                currentRow.push(currentCell);
+                currentCell = '';
+            } else if (char === ',' && !inQuotes && text.indexOf(';') === -1) {
+                currentRow.push(currentCell);
+                currentCell = '';
+            } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                if (char === '\r' && nextChar === '\n') i++; 
+                currentRow.push(currentCell);
+                if (currentRow.length > 1 || currentRow[0].trim() !== '') {
+                    rows.push(currentRow);
+                }
+                currentRow = [];
+                currentCell = '';
+            } else {
+                currentCell += char;
+            }
+        }
+        if (currentCell || currentRow.length > 0) {
+            currentRow.push(currentCell);
+            rows.push(currentRow);
+        }
+
+        if (rows.length < 2) return [];
 
         let headerIndex = -1;
-        for (let i = 0; i < Math.min(50, lines.length); i++) {
-            const lineNorm = this.normalizeHeader(lines[i]);
+        for (let i = 0; i < Math.min(50, rows.length); i++) {
+            const rowStr = rows[i].join(' ').toLowerCase();
+            const lineNorm = this.normalizeHeader(rowStr);
             if (
                 (lineNorm.includes('numero') && lineNorm.includes('identi')) || 
                 lineNorm.includes('cedula') || 
                 lineNorm.includes('tipo_de_nota') ||
-                lineNorm.includes('estado_de_la_solicitud')
+                lineNorm.includes('estado_de_la_solicitud') ||
+                lineNorm.includes('cups')
             ) {
                 headerIndex = i; break;
             }
         }
         if (headerIndex === -1) return [];
 
-        const headerLine = lines[headerIndex];
-        const delimiter = headerLine.split(';').length > headerLine.split(',').length ? ';' : ',';
-        const headers = this.splitCSVRow(headerLine, delimiter).map(h => this.normalizeHeader(this.cleanText(h)));
+        const headers = rows[headerIndex].map(h => this.normalizeHeader(this.cleanText(h)));
 
         const data = [];
-        for (let i = headerIndex + 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            const values = this.splitCSVRow(line, delimiter);
+        for (let i = headerIndex + 1; i < rows.length; i++) {
+            const values = rows[i];
             if (values.length < headers.length * 0.3) continue; 
-            const row: any = {};
-            headers.forEach((h, index) => { row[h] = values[index] ? this.cleanText(values[index]) : ''; });
-            data.push(row);
+            const rowObj: any = {};
+            headers.forEach((h, index) => { 
+                rowObj[h] = values[index] ? this.cleanText(values[index]) : ''; 
+            });
+            data.push(rowObj);
         }
         return data;
     }
 
     
-    // 4. PROCESO PRINCIPAL: CARGA MASIVA MULTI-HOJA
-    
-
     // 4. PROCESO PRINCIPAL: CARGA MASIVA MULTI-HOJA
     static async processPatientExcel(buffer: Buffer) {
         try {
@@ -327,13 +332,14 @@ export class ImportService {
                 ],
                 
                 'nota_realizada': ['nota_realizada', 'numero_nota_realizada', 'nota_factura', 'numero_factura'], 
-                'obs': ['observacion', 'nota', 'descripcion', 'observaciones', 'comentario', 'detalle'],
-                'barrera': ['barrera', 'motivo_no_gestion'],
+                'obs': ['observacion', 'nota', 'descripcion', 'observaciones', 'comentario', 'detalle', 'historia_clinica', 'evolucion'],
+                'tipo_nota': ['tipo_de_nota', 'clase_nota', 'nombre_nota'], 
+                'barrera': ['barrera', 'motivo_no_gestion', 'motivo_inasistencia', 'causa_retraso', 'barrera_de_acceso', 'motivo_cancelacion'],
                 'responsable': ['responsable_1', 'responsable_2', 'usuario_responsable', 'gestor'],
                 'tipo_caso': ['tipo_de_caso', 'tipo_caso', 'clasificacion_caso']
             };
 
-            console.log(`🚀 Procesando ${rawData.length} filas (Modo seguro)...`);
+            console.log(`🚀 Procesando ${rawData.length} filas (Modo Seguro Multilínea)...`);
 
             for (let i = 0; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -348,19 +354,14 @@ export class ImportService {
                             acc[ImportService.normalizeHeader(k)] = row[k]; return acc; 
                         }, {} as any);
 
-                        // 1. BÚSQUEDA EXACTA PRIMERO (Evita confusiones)
                         for (const alias of mapKeys[key]) {
                             if (normalizedRow[alias] !== undefined) return normalizedRow[alias];
                         }
 
-                        // 2. BÚSQUEDA PARCIAL (Si la exacta falla)
                         for (const alias of mapKeys[key]) {
                             const foundKey = Object.keys(normalizedRow).find(k => k.includes(alias));
                             if (key === 'doc' && foundKey && foundKey.includes('tipo')) continue; 
-                            
-                            // 🛡️ Prevenir que 'estado' agarre 'estado_civil'
                             if (key === 'estado_general' && foundKey && foundKey.includes('civil')) continue;
-                            
                             if (foundKey) return normalizedRow[foundKey];
                         }
                         return '';
@@ -409,13 +410,14 @@ export class ImportService {
                     const tipoCaso = ImportService.cleanText(getVal('tipo_caso'));
                     const cie10Code = ImportService.cleanText(getVal('cie10'));
                     const descDx = ImportService.cleanText(getVal('desc_dx'));
+                    const tipoNota = ImportService.cleanText(getVal('tipo_nota')); 
                     
                     let fullObs = obsBase;
+                    if (tipoNota) fullObs = `[${tipoNota}] ${fullObs}`;
                     if (barrera && barrera !== 'NO') fullObs += ` | BARRERA: ${barrera}`;
                     if (tipoCaso) fullObs += ` | TIPO: ${tipoCaso}`;
                     if (resp) fullObs += ` | GESTOR: ${resp}`;
                     
-                    // 🚀 ARREGLO CAC: El diagnóstico va estrictamente a la Nota de Observación
                     let posibleDiagnostico = ImportService.getCohortFromCie10(cie10Code); 
                     if (!posibleDiagnostico) posibleDiagnostico = ImportService.getCohortFromText(descDx); 
 
@@ -445,13 +447,12 @@ export class ImportService {
                     const service = ImportService.cleanText(getVal('servicio'));
                     const cups = ImportService.cleanText(getVal('cups'));
                     
-                    // 🚀 ARREGLO PROCEDIMIENTO: Queda en PENDIENTE o CONSULTA para no ensuciar la tabla
-                    let category = 'PENDIENTE'; // <-- AQUÍ
+                    let category = 'PENDIENTE'; 
                     if (service.includes('CONSULTA') || cups.startsWith('890')) {
                         category = 'Consulta Externa';
                     }
                     
-                    if (cups || service || status === 'REALIZADO' || cie10Code || status === 'EN_GESTION') {
+                    if (cups || service || status === 'REALIZADO' || cie10Code || status === 'EN_GESTION' || fullObs) {
                         const exists = await FollowUp.findOne({
                             where: { patientId: patient.id, serviceName: service.substring(0, 255), dateRequest: dRequest }
                         });
@@ -467,6 +468,22 @@ export class ImportService {
                         } else {
                             let updateData: any = {};
                             
+                            // 1. Si llegó un CUPS y antes estaba vacío, actualizarlo
+                            if (cups && cups !== 'N/A' && (!exists.cups || exists.cups === 'N/A' || exists.cups === '')) {
+                                updateData.cups = cups.substring(0, 20);
+                            }
+
+                            // 2. Si llegó una historia clínica u observación nueva
+                            if (fullObs && fullObs.trim() !== '') {
+                                if (!exists.observation || exists.observation === 'Sin observaciones.' || exists.observation === '') {
+                                    updateData.observation = fullObs;
+                                } else if (!exists.observation.includes(obsBase.substring(0, 20))) { 
+                                    // Adjuntar la nueva nota a las existentes sin borrar las anteriores
+                                    updateData.observation = `${exists.observation} // NUEVA NOTA: ${fullObs}`;
+                                }
+                            }
+
+                            // 3. Manejo de estado
                             if ((!exists.category || exists.category === 'PENDIENTE') && category !== 'PENDIENTE') {
                                 updateData.category = category;
                             }
@@ -480,6 +497,7 @@ export class ImportService {
                                 if (dAppoint) updateData.dateAppointment = dAppoint;
                             }
                             
+                            // Solo guardar si realmente hay algo nuevo que inyectar
                             if (Object.keys(updateData).length > 0) {
                                 await exists.update(updateData);
                             }
@@ -490,9 +508,8 @@ export class ImportService {
                 }
             }
 
-            console.log(`✅ IMPORTACIÓN COMPLETADA: Hojas:${totalSheetsProcessed} | Nuevos:${pCreated} | Upd:${pUpdated} | Citas:${fCreated}`);
+            console.log(`✅ IMPORTACIÓN COMPLETADA: Hojas:${totalSheetsProcessed} | Nuevos:${pCreated} | Upd:${pUpdated} | Citas/Notas:${fCreated}`);
             
-            // La IA clasificará el resto silenciosamente en segundo plano
             await CupsController.runAutoCategorization();
             return { success: true, createdPatients: pCreated, updatedPatients: pUpdated, createdFollowUps: fCreated, errors };
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, UploadCloud, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, FileText, Info, Loader2, Trash2 // 🚀 Agregué Trash2
+  AlertCircle, FileText, Info, Loader2, Trash2 
 } from "lucide-react";
 import api from "@/src/app/services/api";
 
@@ -18,7 +18,6 @@ export default function ImportarDataAtencionPage() {
 
   useEffect(() => { setIsClient(true); }, []);
 
-  // --- MANEJO DEL DRAG & DROP ---
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -42,13 +41,12 @@ export default function ImportarDataAtencionPage() {
     }
   };
 
-  // 🚀 NUEVO: Función para limpiar el archivo si el usuario se equivoca
   const clearFile = (e: React.MouseEvent) => {
-      e.preventDefault(); // Evita que se abra el selector de archivos al hacer clic en borrar
+      e.preventDefault(); 
       setFile(null);
   };
 
-  // --- LÓGICA DE SUBIDA ---
+  // --- LÓGICA DE SUBIDA EN SEGUNDO PLANO ---
   const handleUpload = async () => {
     if (!file) return;
 
@@ -61,10 +59,12 @@ export default function ImportarDataAtencionPage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // 🚀 BLINDAJE: Si el backend no envía details, no se rompe la app
-      const stats = res.data.details || { total: 'Varios', created: 'N/A', updated: 'N/A' };
-      
-      alert(`✅ ¡Importación Finalizada!\n\n📄 Filas procesadas: ${stats.total}\n🆕 Nuevos ingresos: ${stats.created}\n🔄 Registros actualizados: ${stats.updated}`);
+      // 🚀 ALERTA DE PROCESO EN SEGUNDO PLANO (Atención)
+      alert(
+        `✅ ¡ARCHIVO RECIBIDO!\n\n` +
+        `Tu archivo se envió al servidor y se está procesando en segundo plano.\n\n` +
+        `Los pacientes y sus citas comenzarán a aparecer en el Directorio y en la Agenda progresivamente durante los próximos minutos.`
+      );
       
       setFile(null);
       router.push("/navegacion/atencion/pacientes"); 
@@ -90,7 +90,7 @@ export default function ImportarDataAtencionPage() {
         </Link>
         <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Carga Masiva</h1>
-            <p className="text-slate-500 font-medium text-sm">Importación masiva de expedientes desde Excel o CSV.</p>
+            <p className="text-slate-500 font-medium text-sm">Importación de expedientes en segundo plano (Anti-caídas).</p>
         </div>
       </div>
 
@@ -121,25 +121,23 @@ export default function ImportarDataAtencionPage() {
                         ? 'border-emerald-500 bg-emerald-50 scale-[1.01] shadow-lg' 
                         : file 
                             ? 'border-emerald-500 bg-emerald-50/50 shadow-inner'
-                            : 'border-slate-200 hover:border-emerald-400 hover:bg-slate-50 shadow-sm cursor-pointer'
+                            : 'border-slate-200 hover:border-emerald-400 hover:bg-slate-50 shadow-sm'
                     }
                 `}
             >
                 <input 
                     type="file" 
-                    id="fileInput" 
+                    id="fileInputAtencion" 
                     className="hidden" 
                     accept=".xlsx,.xls,.csv"
                     onChange={handleFileChange}
                     disabled={uploading}
                 />
                 
-                {/* 🚀 LÓGICA SEPARADA PARA EVITAR ABRIR EL INPUT AL QUERER BORRAR */}
                 {file ? (
-                    <div className="animate-in zoom-in duration-500 flex flex-col items-center justify-center">
+                    <div className="animate-in zoom-in duration-500 flex flex-col items-center justify-center relative">
                         <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-sm relative">
                             <FileSpreadsheet size={40}/>
-                            {/* Botón flotante para eliminar el archivo */}
                             {!uploading && (
                                 <button 
                                     onClick={clearFile}
@@ -156,8 +154,8 @@ export default function ImportarDataAtencionPage() {
                         </p>
                     </div>
                 ) : (
-                    <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-                        <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 text-slate-300">
+                    <label htmlFor="fileInputAtencion" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
+                        <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 text-slate-300 group-hover:text-emerald-500 transition-colors">
                             <FileText size={40}/>
                         </div>
                         <h3 className="text-lg font-black text-slate-700 uppercase tracking-tight">Seleccionar archivo local</h3>
@@ -180,7 +178,7 @@ export default function ImportarDataAtencionPage() {
                 >
                     {uploading ? (
                         <>
-                            <Loader2 size={18} className="animate-spin text-white"/> PROCESANDO...
+                            <Loader2 size={18} className="animate-spin text-white"/> ENVIANDO AL SERVIDOR...
                         </>
                     ) : (
                         <>

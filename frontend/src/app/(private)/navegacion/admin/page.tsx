@@ -9,11 +9,12 @@ import {
   Calendar, Clock4, AlertCircle, FileText, Syringe, Activity, Stethoscope, FlaskConical, Scissors
 } from "lucide-react";
 import { 
-  BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart as RePieChart, Pie, Cell, Legend 
 } from 'recharts';
 
 import api from "@/src/app/services/api";
+import { getFechaLocal } from "@/src/app/core/utils/dateUtils"; // 👈 1. IMPORTAMOS NUESTRA FUNCIÓN SEGURA
 
 // --- 1. CONSTANTES DE ESTADO ---
 const OPCIONES_ESTADO = [
@@ -145,6 +146,7 @@ export default function AdminDashboardPage() {
   const [patients, setPatients] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ total: 0, pendientes: 0, realizados: 0, agendados: 0 });
   const [chartData, setChartData] = useState<any[]>([]);
+  const [barrerasData, setBarrerasData] = useState<any[]>([]);
   
   const [busqueda, setBusqueda] = useState("");
   const [page, setPage] = useState(1);
@@ -166,7 +168,6 @@ export default function AdminDashboardPage() {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
-  // --- FETCH DATA CORREGIDO ---
   // --- FETCH DATA CON DOBLE LLAMADA (ESTADÍSTICAS + TABLA) ---
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -186,7 +187,7 @@ export default function AdminDashboardPage() {
         // 🔥 LA MAGIA: Hacemos dos peticiones simultáneas (Tabla y Estadísticas)
         const [resData, resStats] = await Promise.all([
             api.get('/navegacion/patients', { params }),
-            api.get('/navegacion/patients', { params: { ...params, onlyStats: 'true' } }) // 👈 Pide las stats reales
+            api.get('/navegacion/patients', { params: { ...params, onlyStats: 'true' } }) 
         ]);
 
         const data = resData.data;
@@ -199,8 +200,8 @@ export default function AdminDashboardPage() {
             const mappedData = rawData.map((p: any) => {
                 const f = (p.followups && p.followups.length > 0) ? p.followups[0] : {}; 
                 
-                // Si no hay fecha en el Excel, usa la fecha de hoy
-                const fechaSolStr = f.dateRequest || p.createdAt || new Date().toISOString();
+                // 👈 2. APLICAMOS LA FUNCIÓN SEGURA AQUÍ (getFechaLocal)
+                const fechaSolStr = f.dateRequest || p.createdAt || getFechaLocal();
                 const fechaSol = new Date(fechaSolStr);
                 const hoy = new Date();
                 const dias = Math.ceil(Math.abs(hoy.getTime() - fechaSol.getTime()) / (1000 * 60 * 60 * 24)); 
@@ -227,25 +228,25 @@ export default function AdminDashboardPage() {
             setTotalPages(data.pagination?.totalPages || 1);
         }
 
-        // 2. LLENAR LOS KPIs Y GRÁFICAS (Los cuadros de arriba que salían en 0)
+        // 2. LLENAR LOS KPIs Y GRÁFICAS
         if (statsData.success && statsData.stats) {
-            setStats(statsData.stats); // Esto enciende los contadores
+            setStats(statsData.stats);
             
             if (statsData.stats.topProcedures) {
-                // 1. Forzamos a que 'cantidad' sea un NÚMERO real para que Recharts no falle.
-                const procesados = statsData.stats.topProcedures.map((item: any) => ({
+                const safeStats = statsData.stats.topProcedures.map((item: any) => ({
                     name: item.name || 'SIN DEFINIR',
-                    cantidad: Number(item.cantidad || 0) 
+                    cantidad: Number(item.cantidad || item.count || item.value || 0)
                 }));
-
-                // 2. Hacemos la comparación ignorando mayúsculas/minúsculas
-                const validStats = procesados.filter((item: any) => {
-                    const nombreBD = item.name.toUpperCase();
+                const validStats = safeStats.filter((item: any) => {
+                    const nombreBD = String(item.name).toUpperCase();
                     return MODALIDADES.some(m => nombreBD.includes(m.toUpperCase()));
                 });
+                setChartData(validStats.length > 0 ? validStats : safeStats);
+            }
 
-                // 3. Asignamos los datos (si el filtro falla, mostramos los procesados originales)
-                setChartData(validStats.length > 0 ? validStats : procesados);
+            // Llenamos el gráfico de Barreras
+            if (statsData.stats.topBarreras) {
+                setBarrerasData(statsData.stats.topBarreras);
             }
         }
 
@@ -506,6 +507,30 @@ export default function AdminDashboardPage() {
                         <Bar dataKey="cantidad" fill="#3b82f6" radius={[6, 6, 6, 6]} barSize={40} />
                     </BarChart>
                 </ResponsiveContainer>
+            </div>
+        </div>
+
+        {/* 🚀 NUEVA GRÁFICA DE BARRERAS */}
+        <div className="col-span-1 lg:col-span-3 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
+            <h4 className="text-sm font-bold text-red-600 mb-6 flex items-center gap-2">
+                Barreras Frecuentes
+            </h4>
+            <div className="h-72 w-full">
+                {barrerasData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-slate-400 font-medium">
+                        No hay barreras registradas aún.
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={barrerasData} layout="vertical" margin={{top: 0, right: 30, left: 0, bottom: 0}}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                            <XAxis type="number" axisLine={false} tickLine={false} tick={{fontSize: 11, fill:'#64748b'}} />
+                            <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fill:'#64748b'}} width={180} />
+                            <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}} />
+                            <Bar dataKey="cantidad" fill="#ef4444" radius={[0, 6, 6, 0]} barSize={24} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                )}
             </div>
         </div>
       </div>

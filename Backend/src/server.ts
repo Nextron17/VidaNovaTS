@@ -22,23 +22,30 @@ app.use(cors({
 
 app.use(morgan('dev'));
 
-app.use(express.json({ limit: '500mb' })); 
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+
+app.use(express.json({ limit: '50mb' })); 
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 
+// RUTAS DEL SISTEMA
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/navegacion', navegacionRoutes); 
 
+// HEALTH CHECK
 app.get('/api/health', (req, res) => {
+    // Calculamos la hora de Colombia para el log del servidor
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000; 
+    const localTime = new Date(Date.now() - tzoffset).toISOString();
+
     res.json({ 
         status: 'OK', 
-        mode: 'Unrestricted / Massive Data Ready',
-        timestamp: new Date().toISOString() 
+        mode: 'Enterprise / Background Processing Ready',
+        timestamp: localTime 
     });
 });
 
-
+// MANEJO DE RUTAS INEXISTENTES (404)
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -51,16 +58,19 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     
     console.error("❌ ERROR DETECTADO:", err);
 
+    const isDev = process.env.NODE_ENV === 'development';
+
     res.status(status).json({
         success: false,
         error: err.message || 'Error interno del servidor',
-        stack: err.stack, 
-        detail: err.parent?.detail || err.original?.detail || err.message
+        ...(isDev && { 
+            stack: err.stack, 
+            detail: err.parent?.detail || err.original?.detail 
+        })
     });
 });
 
 const server = createServer(app);
-
-server.timeout = 0; 
+server.timeout = 120000; 
 
 export { app, server };
