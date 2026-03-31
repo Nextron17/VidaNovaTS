@@ -1,7 +1,7 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { Patient } from './Patient';
 import { User } from '../../usuarios/models/User';
-import { MasterCUP } from './MasterCUP'; // 👈 Importación esencial
+import { MasterCUP } from './MasterCUP'; 
 
 @Table({
     tableName: 'followups',

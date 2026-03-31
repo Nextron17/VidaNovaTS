@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize'; 
-import { sendEmail } from '../../../core/utils/mailer'; // 🚀 Importación corregida
+import { sendEmail } from '../../../core/utils/mailer'; 
 
 export class AuthController {
 
@@ -81,7 +81,7 @@ export class AuthController {
             user.resetTokenExpire = new Date(Date.now() + 3600000); // 1 hora
             await user.save();
 
-            // 🚀 MAGIA DINÁMICA SEGURA (Manejo de TypeScript estricto)
+            // MAGIA DINÁMICA SEGURA (Manejo de TypeScript estricto)
             const referer = req.headers.referer as string | undefined;
             
             let clientUrl = req.headers.origin 

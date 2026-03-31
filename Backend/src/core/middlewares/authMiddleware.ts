@@ -39,7 +39,7 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
             attributes: { exclude: ['password', 'resetPasswordToken'] }
         });
 
-        // 🛡️ REGLA 1: ¿El usuario fue eliminado?
+        // REGLA 1: ¿El usuario fue eliminado?
         if (!user) {
             res.status(401).json({ 
                 success: false,
@@ -49,7 +49,7 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
             return;
         }
 
-        // 🛡️ REGLA 2: ¿El usuario fue suspendido/desactivado por un Admin?
+        // REGLA 2: ¿El usuario fue suspendido/desactivado por un Admin?
         // Nota: Asegúrate de tener un campo en tu modelo User (ej. 'isActive' boolean o 'status' string)
         if (user.isActive === false) { 
             console.warn(`⛔ Intento de acceso bloqueado: Cuenta suspendida (ID: ${user.id})`);
@@ -91,9 +91,7 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
     }
 };
 
-// ==========================================
 // MIDDLEWARE DE AUTORIZACIÓN (Por Roles)
-// ==========================================
 export const requireRoles = (allowedRoles: string[]) => {
     return (req: Request, res: Response, next: NextFunction): void => {
         

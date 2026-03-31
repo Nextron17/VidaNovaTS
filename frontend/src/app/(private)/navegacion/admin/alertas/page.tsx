@@ -9,6 +9,20 @@ import {
 import Link from "next/link";
 import api from "@/src/app/services/api";
 
+// --- UTILIDAD: Formateo Seguro de Fechas (Anti-Crash y Anti-Zona Horaria) ---
+const formatSafeDate = (dateString: any) => {
+    if (!dateString) return 'Sin Fecha';
+    try {
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return 'Fecha Inválida';
+        // Ajustamos la zona horaria para que no se atrase un día
+        const adjustedDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+        return adjustedDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (error) {
+        return '---';
+    }
+};
+
 export default function AlertasPage() {
   const [loading, setLoading] = useState(true);
   const [inconsistencies, setInconsistencies] = useState<any[]>([]);
@@ -19,8 +33,8 @@ export default function AlertasPage() {
     try {
       const res = await api.get('/navegacion/alerts');
       if (res.data.success) {
-          setInconsistencies(res.data.inconsistencies);
-          setOverdue(res.data.overdue);
+          setInconsistencies(res.data.inconsistencies || []);
+          setOverdue(res.data.overdue || []);
       }
     } catch (error) {
       console.error("Error cargando alertas:", error);
@@ -127,15 +141,17 @@ export default function AlertasPage() {
                                 <div className="flex justify-between items-start mb-4 relative z-10">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100 font-black text-xs uppercase">
-                                            {item.paciente.substring(0,2)}
+                                            {item.paciente?.substring(0,2) || 'XX'}
                                         </div>
                                         <div>
                                             <span className="font-black text-slate-900 text-sm uppercase block tracking-tight">{item.paciente}</span>
                                             <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{item.eps || 'No EPS'}</span>
                                         </div>
                                     </div>
+                                    
+                                    {/* FIX: Se usa el patientId para redirigir al perfil del paciente */}
                                     <Link 
-                                      href={`/navegacion/admin/pacientes/perfil?id=${item.id}`}
+                                      href={`/navegacion/admin/pacientes/perfil?id=${item.patientId || item.id}`}
                                       className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-widest"
                                     >
                                       Corregir
@@ -143,20 +159,20 @@ export default function AlertasPage() {
                                 </div>
                                 
                                 <div className="text-xs text-slate-500 font-medium mb-5 pl-1 tracking-tight italic">
-                                    "{item.proc}"
+                                    "{item.proc || item.serviceName}"
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-50">
                                     <div className="space-y-1">
                                         <span className="text-slate-400 uppercase font-black text-[9px] tracking-[0.15em] block">Solicitud</span>
                                         <span className="font-black text-indigo-600 text-xs">
-                                            {new Date(item.fecha_sol).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                            {formatSafeDate(item.fecha_sol || item.dateRequest)}
                                         </span>
                                     </div>
                                     <div className="space-y-1 border-l border-slate-200 pl-4">
                                         <span className="text-rose-400 uppercase font-black text-[9px] tracking-[0.15em] block">Cita (Error)</span>
                                         <span className="font-black text-rose-600 text-xs">
-                                            {new Date(item.fecha_cita).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                            {formatSafeDate(item.fecha_cita || item.dateAppointment)}
                                         </span>
                                     </div>
                                 </div>
@@ -197,7 +213,7 @@ export default function AlertasPage() {
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg font-black text-xs uppercase tracking-tighter ring-4 ring-slate-50">
-                                            {item.paciente.substring(0,2)}
+                                            {item.paciente?.substring(0,2) || 'XX'}
                                         </div>
                                         <div>
                                             <span className="font-black text-slate-900 text-sm uppercase block tracking-tight leading-none mb-1">{item.paciente}</span>
@@ -213,11 +229,12 @@ export default function AlertasPage() {
                                 
                                 <div className="p-4 bg-slate-50 rounded-2xl mb-4 border border-slate-100">
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Servicio Pendiente</span>
-                                    <span className="text-xs font-bold text-slate-700 leading-tight block">{item.proc}</span>
+                                    <span className="text-xs font-bold text-slate-700 leading-tight block">{item.proc || item.serviceName}</span>
                                 </div>
 
+                                {/* FIX: Se usa el followUpId (o id directo) para redirigir a la gestión */}
                                 <Link 
-                                  href={`/navegacion/admin/gestion?id=${item.id}`}
+                                  href={`/navegacion/admin/gestion?id=${item.followUpId || item.id}`}
                                   className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-indigo-600 rounded-xl text-xs font-black hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm"
                                 >
                                   GESTIONAR AHORA <ArrowRight size={14}/>

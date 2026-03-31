@@ -4,7 +4,7 @@ import { User } from '../../modules/usuarios/models/User';
 @Table({
     tableName: 'audit_logs',
     timestamps: true,
-    updatedAt: false, // Los logs son inmutables
+    updatedAt: false,
 })
 export class AuditLog extends Model {
     

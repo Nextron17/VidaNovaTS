@@ -74,7 +74,9 @@ function ProfileContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return; 
+    // 🛡️ EL ESCUDO FRONTEND: Si el ID no está listo o viene como el texto "undefined", abortamos silenciosamente
+    if (!id || id === 'undefined' || id === 'null') return; 
+
     const fetchDetails = async () => {
       try {
         const res = await api.get(`/navegacion/patients/${id}`);
@@ -98,6 +100,7 @@ function ProfileContent() {
         setLoading(false);
       }
     };
+    
     fetchDetails();
   }, [id, router]);
 
@@ -111,7 +114,8 @@ function ProfileContent() {
     }
   };
 
-  if (loading) return (
+  // Si el ID es inválido o está cargando, mostramos el loader
+  if (!id || id === 'undefined' || loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <Loader2 className="animate-spin text-blue-600" size={40}/>
         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Cargando Historia...</p>
@@ -201,7 +205,6 @@ function ProfileContent() {
                             {/* Bolita de tiempo */}
                             <div className={`absolute -left-[41px] top-0 w-5 h-5 rounded-full border-4 bg-white shadow-sm z-10 ${String(h.status).includes('REALIZADO') ? 'border-emerald-500' : 'border-slate-300'}`} />
                             
-                            {/* 🛡️ APLICAMOS LA FUNCIÓN SEGURA AQUÍ */}
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                                 {formatSafeDate(h.dateRequest || h.createdAt)}
                             </div>

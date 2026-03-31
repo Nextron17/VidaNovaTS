@@ -10,7 +10,7 @@ export class MasterCUP extends Model {
     @Column({ 
         type: DataType.STRING(50), 
         allowNull: false, 
-        unique: true // El código es la llave de conexión
+        unique: true
     })
     codigo!: string;
 
@@ -20,8 +20,6 @@ export class MasterCUP extends Model {
     @Column({ type: DataType.STRING(50), defaultValue: 'PENDIENTE' })
     grupo!: string;
 
-    // --- RELACIÓN ---
-    // Un código en el maestro puede aparecer en muchos seguimientos
     @HasMany(() => FollowUp, { foreignKey: 'cups', sourceKey: 'codigo' })
     followups!: FollowUp[];
 }

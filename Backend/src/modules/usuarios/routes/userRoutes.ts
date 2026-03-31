@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { body, param } from 'express-validator';
-// ✅ AQUÍ CAMBIAMOS LOS NOMBRES A LOS NUEVOS
 import { authenticateJWT, requireRoles } from '../../../core/middlewares/authMiddleware';
 
 const router = Router();

@@ -21,26 +21,19 @@ export class PatientController {
                 });
             }
             
-            // 1. CLONAMOS LA MEMORIA: Guardamos el archivo y los datos del usuario 
-            // antes de cerrar la conexión HTTP.
             const fileBuffer = Buffer.from(req.file.buffer);
             const operatorId = req.user?.id;
 
-            // 2. RESPUESTA INMEDIATA (202 Accepted): Le decimos al Frontend que todo está bien 
-            // ANTES de procesar las miles de filas.
             res.status(202).json({ 
                 success: true,
                 message: 'Archivo recibido correctamente. El sistema está procesando los datos en segundo plano.', 
             });
 
-            // 3. PROCESAMIENTO ASÍNCRONO ("Fire and Forget")
-            // Esto se ejecuta en la sombra sin bloquear a nadie.
             setTimeout(async () => {
                 try {
                     console.log("⚙️ [BACKGROUND TASK] Iniciando procesamiento de Excel...");
                     const result = await ImportService.processPatientExcel(fileBuffer);
                     
-                    // 🕵️‍♂️ AUDITORÍA: Registro de importación masiva al terminar
                     if (operatorId) {
                         await AuditLog.create({
                             userId: operatorId,
@@ -54,7 +47,6 @@ export class PatientController {
                     console.log("✅ [BACKGROUND TASK] Importación finalizada con éxito.");
                 } catch (bgError) {
                     console.error("❌ [BACKGROUND TASK] Error procesando Excel:", bgError);
-                    // Aquí podrías agregar lógica para enviar un email al admin avisando del error
                 }
             }, 0);
 
@@ -64,7 +56,7 @@ export class PatientController {
         }
     }
 
-// 2. LISTAR PACIENTES (ARREGLADO PARA PENDIENTES AUTOMÁTICOS)
+    // 2. LISTAR PACIENTES
     static getPatients = async (req: Request, res: Response) => {
         try {
             const { 
@@ -72,16 +64,20 @@ export class PatientController {
                 cohorte = '', startDate, endDate, onlyStats = 'false' 
             } = req.query;
 
-            // 🚀 MEJORA 1: ESTADÍSTICAS GLOBALES INTELIGENTES
+            // 1. ESTADÍSTICAS GLOBALES
             if (onlyStats === 'true') {
-                const total = await Patient.count();
                 const realizados = await FollowUp.count({ where: { status: 'REALIZADO' } });
                 const agendados = await FollowUp.count({ where: { status: 'AGENDADO' } });
                 const enGestion = await FollowUp.count({ where: { status: 'EN_GESTION' } });
                 const cancelados = await FollowUp.count({ where: { status: 'CANCELADO' } });
+                const pendientesDirectos = await FollowUp.count({ where: { status: 'PENDIENTE' } });
 
-                // 💡 PENDIENTES = Total de pacientes - (Los que ya tienen un estado diferente)
-                const pendientes = total - (realizados + agendados + enGestion + cancelados);
+                const totalPacientes = await Patient.count();
+                const pacientesConCitas = await FollowUp.count({ distinct: true, col: 'patientId' });
+                const pacientesNuevosSinCitas = Math.max(0, totalPacientes - pacientesConCitas);
+
+                const pendientes = pendientesDirectos + pacientesNuevosSinCitas;
+                const total = realizados + agendados + enGestion + cancelados + pendientes;
 
                 const topProcedures = await FollowUp.findAll({
                     attributes: [
@@ -92,30 +88,26 @@ export class PatientController {
                     group: ['category'],
                     order: [[sequelize.literal('cantidad'), 'DESC']],
                     limit: 7,
-                    raw: true // Crucial para agregaciones
+                    raw: true 
                 });
 
-                // 1. Traemos solo las observaciones que contienen la palabra BARRERA
                 const followUpsConBarrera = await FollowUp.findAll({
                     attributes: ['observation'],
                     where: { observation: { [Op.like]: '%BARRERA:%' } },
                     raw: true
                 });
 
-                // 2. Extraemos y contamos (omitiendo "Ninguna")
                 const conteoBarreras: Record<string, number> = {};
                 followUpsConBarrera.forEach((f: any) => {
                     const match = f.observation?.match(/BARRERA:\s*([^|]+)/i);
                     if (match) {
                         const barrera = match[1].trim();
-                        // Ignoramos si la barrera es "Ninguna" o "NO"
                         if (barrera && !['NINGUNA / SIN BARRERA', 'NO', 'NINGUNA'].includes(barrera.toUpperCase())) {
                             conteoBarreras[barrera] = (conteoBarreras[barrera] || 0) + 1;
                         }
                     }
                 });
 
-                // 3. Convertimos a formato Recharts, ordenamos y sacamos el Top 5
                 const topBarreras = Object.entries(conteoBarreras)
                     .map(([name, cantidad]) => ({ name, cantidad }))
                     .sort((a, b) => b.cantidad - a.cantidad)
@@ -123,94 +115,157 @@ export class PatientController {
 
                 return res.json({
                     success: true,
-                    stats: { total, pendientes, realizados, agendados, topProcedures, topBarreras } // 👈 topBarreras añadido aquí
+                    stats: { 
+                        total, 
+                        pendientes, 
+                        en_gestion: enGestion,
+                        agendados, 
+                        realizados, 
+                        cancelados,           
+                        topProcedures, 
+                        topBarreras 
+                    } 
                 });
             }
 
-            // --- LÓGICA DE FILTRADO PARA LA TABLA ---
+            // 2. BÚSQUEDA Y FILTRADO CON "TWO-STEP LOOKUP"
             const offset = (Number(page) - 1) * Number(limit);
-            
             const patientWhere: any = {};
-            const andConditions: any[] = []; 
-
-            if (eps && eps !== 'TODAS') {
-                andConditions.push({ insurance: { [Op.like]: `%${eps}%` } });
-            }
-
-            if (search) {
-                // Convertimos la búsqueda a mayúsculas por si acaso (para evitar fallos por minúsculas)
-                const cleanSearch = String(search).toUpperCase();
-                andConditions.push({
-                    [Op.or]: [
-                        { documentNumber: { [Op.like]: `%${cleanSearch}%` } },
-                        { firstName: { [Op.like]: `%${cleanSearch}%` } },
-                        { lastName: { [Op.like]: `%${cleanSearch}%` } },
-                        // 👇 AÑADIMOS LOS CAMPOS DEL SEGUIMIENTO (CUPS, Servicio, Categoría y Notas)
-                        { '$followups.cups$': { [Op.like]: `%${cleanSearch}%` } },
-                        { '$followups.category$': { [Op.like]: `%${cleanSearch}%` } },
-                        { '$followups.serviceName$': { [Op.like]: `%${cleanSearch}%` } },
-                        { '$followups.observation$': { [Op.like]: `%${cleanSearch}%` } }
-                    ]
-                });
-            }
-
             const followUpWhere: any = {};
-            let hasFollowUpFilters = false; 
+            
+            let matchedPatientIds: number[] | null = null; // Guardará los IDs validados
 
-            // 🚀 MEJORA 2: INCLUIR PACIENTES NUEVOS COMO PENDIENTES
-            if (status === 'PENDIENTE') {
-                andConditions.push({
-                    [Op.or]: [
-                        { '$followups.status$': 'PENDIENTE' },
-                        { '$followups.id$': null } // Si no tiene FollowUp, es pendiente automáticamente
-                    ]
+            // A) Filtro de EPS
+            if (eps && eps !== 'TODAS') {
+                patientWhere.insurance = { [Op.like]: `%${eps}%` };
+            }
+
+            // B) Búsqueda Global por texto
+            if (search) {
+                const cleanSearch = String(search).toUpperCase();
+                
+                const matchingFollowUps = await FollowUp.findAll({
+                    attributes: ['patientId'],
+                    where: {
+                        [Op.or]: [
+                            { cups: { [Op.like]: `%${cleanSearch}%` } },
+                            { category: { [Op.like]: `%${cleanSearch}%` } },
+                            { serviceName: { [Op.like]: `%${cleanSearch}%` } },
+                            { observation: { [Op.like]: `%${cleanSearch}%` } }
+                        ]
+                    },
+                    raw: true
                 });
+                const searchIds = matchingFollowUps.map((f: any) => f.patientId);
+
+                const textMatchingPatients = await Patient.findAll({
+                    attributes: ['id'],
+                    where: {
+                        [Op.or]: [
+                            { documentNumber: { [Op.like]: `%${cleanSearch}%` } },
+                            { firstName: { [Op.like]: `%${cleanSearch}%` } },
+                            { lastName: { [Op.like]: `%${cleanSearch}%` } }
+                        ]
+                    },
+                    raw: true
+                });
+                const textIds = textMatchingPatients.map((p: any) => p.id);
+
+                matchedPatientIds = [...new Set([...searchIds, ...textIds])];
+            }
+
+            // C) Filtro por Estado 
+            if (status === 'PENDIENTE') {
+                const pendingCitas = await FollowUp.findAll({ attributes: ['patientId'], where: { status: 'PENDIENTE' }, raw: true });
+                const pendingIds = pendingCitas.map((f: any) => f.patientId);
+                
+                const allPacientesCitas = await FollowUp.findAll({ attributes: ['patientId'], group: ['patientId'], raw: true });
+                const withCitasIds = allPacientesCitas.map((f: any) => f.patientId);
+
+                const allPatients = await Patient.findAll({ attributes: ['id'], raw: true });
+                const huerfanosIds = allPatients.map((p: any) => p.id).filter(id => !withCitasIds.includes(id));
+
+                const validPendingIds = [...new Set([...pendingIds, ...huerfanosIds])];
+
+                if (matchedPatientIds !== null) {
+                    matchedPatientIds = matchedPatientIds.filter(id => validPendingIds.includes(id));
+                } else {
+                    matchedPatientIds = validPendingIds;
+                }
+
+                followUpWhere.status = 'PENDIENTE';
             } else if (status && status !== 'TODOS') {
+                // Buscamos directamente qué pacientes tienen este estado (ej. AGENDADO)
+                const statusCitas = await FollowUp.findAll({ attributes: ['patientId'], where: { status: status }, raw: true });
+                const statusIds = statusCitas.map((f: any) => f.patientId);
+
+                if (matchedPatientIds !== null) {
+                    matchedPatientIds = matchedPatientIds.filter(id => statusIds.includes(id));
+                } else {
+                    matchedPatientIds = statusIds;
+                }
+
                 followUpWhere.status = status;
-                hasFollowUpFilters = true;
             }
 
-            if (andConditions.length > 0) {
-                patientWhere[Op.and] = andConditions;
-            }
-
+            // D) Filtro por Fechas
             if (startDate && endDate) {
-                followUpWhere.dateRequest = {
-                    [Op.between]: [new Date(startDate as string), new Date(endDate as string)]
-                };
-                hasFollowUpFilters = true;
+                followUpWhere.dateRequest = { [Op.between]: [new Date(startDate as string), new Date(endDate as string)] };
+                
+                const dateCitas = await FollowUp.findAll({ attributes: ['patientId'], where: { dateRequest: followUpWhere.dateRequest }, raw: true });
+                const dateIds = dateCitas.map((f: any) => f.patientId);
+                
+                if (matchedPatientIds !== null) {
+                    matchedPatientIds = matchedPatientIds.filter(id => dateIds.includes(id));
+                } else {
+                    matchedPatientIds = dateIds;
+                }
             }
 
+            // E) Filtro por Modalidad/Cohorte
             if (cohorte) {
                 const filtrosList = (cohorte as string).split(',').map(f => f.trim()).filter(f => f);
                 if (filtrosList.length > 0) {
-                    followUpWhere[Op.or] = filtrosList.map(filtro => ({
+                    const orConditions = filtrosList.map(filtro => ({
                         [Op.or]: [
                             { category: { [Op.like]: `%${filtro}%` } },
                             { observation: { [Op.like]: `%${filtro}%` } }
                         ]
                     }));
-                    hasFollowUpFilters = true;
+                    followUpWhere[Op.or] = orConditions;
+
+                    const cohorteCitas = await FollowUp.findAll({ attributes: ['patientId'], where: { [Op.or]: orConditions }, raw: true });
+                    const cohorteIds = cohorteCitas.map((f: any) => f.patientId);
+
+                    if (matchedPatientIds !== null) {
+                        matchedPatientIds = matchedPatientIds.filter(id => cohorteIds.includes(id));
+                    } else {
+                        matchedPatientIds = cohorteIds;
+                    }
                 }
             }
 
-            // ⚠️ subQuery: false es OBLIGATORIO para que el filtro de PENDIENTES funcione sin errores SQL
+            // INYECCIÓN DE LOS IDs ENCONTRADOS
+            if (matchedPatientIds !== null) {
+                // Si la lista quedó vacía tras los cruces, mandamos un ID inexistente [0] para que retorne vacío rápido.
+                patientWhere.id = matchedPatientIds.length > 0 ? { [Op.in]: matchedPatientIds } : { [Op.in]: [0] };
+            }
+
+            // EJECUCIÓN LIMPIA SIN PROBLEMAS DE SUBQUERIES
             const { count, rows } = await Patient.findAndCountAll({
                 where: patientWhere,
                 include: [{
                     model: FollowUp,
                     as: 'followups',
-                    required: hasFollowUpFilters, 
-                    where: hasFollowUpFilters ? followUpWhere : undefined,
+                    required: false, 
+                    where: Object.keys(followUpWhere).length > 0 ? followUpWhere : undefined,
                 }],
                 distinct: true,
                 limit: Number(limit),
                 offset: offset,
-                order: [['updatedAt', 'DESC']],
-                subQuery: false 
+                order: [['updatedAt', 'DESC']]
             });
 
-            // Reordenar seguimientos en memoria
             rows.forEach((p: any) => {
                 if (p.followups && p.followups.length > 0) {
                     p.followups.sort((a: any, b: any) => 
@@ -257,7 +312,6 @@ export class PatientController {
 
             await FollowUp.bulkCreate(newFollowUps, { transaction: t });
 
-            // 🕵️‍♂️ AUDITORÍA: Actualización Masiva
             if (operatorId) {
                 await AuditLog.create({
                     userId: operatorId,
@@ -334,7 +388,6 @@ export class PatientController {
                     { where: { cups: { [Op.in]: cupsCodes } }, transaction: t }
                 );
 
-                // 🕵️‍♂️ AUDITORÍA: Cambios en el maestro de CUPS
                 if (operatorId) {
                     await AuditLog.create({
                         userId: operatorId, action: 'UPDATE_CUPS', tableName: 'FollowUps',
@@ -358,42 +411,43 @@ export class PatientController {
 
     // 5. DETALLES Y CRUD
     static getPatientById = async (req: Request, res: Response) => {
-    try {
-        const id = String(req.params.id);
-        
-        // 1. Buscamos el paciente con sus seguimientos
-        const patient = await Patient.findByPk(id, {
-            include: [{ model: FollowUp, as: 'followups' }],
-            order: [[{ model: FollowUp, as: 'followups' }, 'dateRequest', 'DESC']]
-        });
+        try {
+            const id = String(req.params.id);
+            
+            if (!id || id === 'undefined' || id === 'null' || isNaN(Number(id))) {
+                return res.status(400).json({ success: false, error: 'ID de paciente inválido o no proporcionado.' });
+            }
 
-        if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
+            const patient = await Patient.findByPk(id, {
+                include: [{ model: FollowUp, as: 'followups' }],
+                order: [[{ model: FollowUp, as: 'followups' }, 'dateRequest', 'DESC']]
+            });
 
-        // 2. 🕵️ Buscamos los logs manualmente forzando el ID a String
-        const history = await AuditLog.findAll({
-            where: {
-                tableName: 'Patients',
-                recordId: id // Aquí 'id' ya es un String, así que Postgres no fallará
-            },
-            limit: 10,
-            order: [['createdAt', 'DESC']],
-            include: [{ model: User, attributes: ['name'] }]
-        });
+            if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
 
-        // 3. Enviamos todo junto
-        res.json({ 
-            success: true, 
-            data: {
-                ...patient.toJSON(),
-                auditLogs: history // El frontend recibirá los logs aquí
-            } 
-        }); 
+            const history = await AuditLog.findAll({
+                where: {
+                    tableName: 'Patients',
+                    recordId: id 
+                },
+                limit: 10,
+                order: [['createdAt', 'DESC']],
+                include: [{ model: User, attributes: ['name'] }]
+            });
 
-    } catch (error) {
-        console.error("❌ Error en detalle de paciente:", error);
-        res.status(500).json({ success: false });
+            res.json({ 
+                success: true, 
+                data: {
+                    ...patient.toJSON(),
+                    auditLogs: history 
+                } 
+            }); 
+
+        } catch (error) {
+            console.error("❌ Error en detalle de paciente:", error);
+            res.status(500).json({ success: false });
+        }
     }
-}
 
     static createPatient = async (req: Request, res: Response) => {
         try {
@@ -401,18 +455,16 @@ export class PatientController {
             const exists = await Patient.findOne({ where: { documentNumber: req.body.documentNumber } });
             if (exists) return res.status(400).json({ success: false, error: 'Ya existe.' });
             
-            // En lugar de Patient.create(req.body), haz esto:
-                const { 
-                    documentType, documentNumber, firstName, lastName, 
-                    phone, email, insurance, city, department, gender, birthDate, status 
-                } = req.body;
+            const { 
+                documentType, documentNumber, firstName, lastName, 
+                phone, email, insurance, city, department, gender, birthDate, status 
+            } = req.body;
 
-                const newPatient = await Patient.create({
-                    documentType, documentNumber, firstName, lastName, 
-                    phone, email, insurance, city, department, gender, birthDate, status
-                });
+            const newPatient = await Patient.create({
+                documentType, documentNumber, firstName, lastName, 
+                phone, email, insurance, city, department, gender, birthDate, status
+            });
 
-            // 🕵️‍♂️ AUDITORÍA: Creación Manual
             if (operatorId) {
                 await AuditLog.create({
                     userId: operatorId, action: 'CREATE', tableName: 'Patients',
@@ -429,13 +481,12 @@ export class PatientController {
     // 6. ACTUALIZAR PACIENTE CON TRAZABILIDAD DINÁMICA
     static updatePatient = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
-        const operatorId = req.user?.id; // Extraído del middleware de autenticación
+        const operatorId = req.user?.id; 
 
         try {
             const id = String(req.params.id); 
             const data = req.body;
 
-            // 1. Buscar paciente actual
             const patient = await Patient.findByPk(id);
             
             if (!patient) {
@@ -446,14 +497,10 @@ export class PatientController {
                 });
             }
 
-            // 2. 🕵️‍♂️ Capturar estado anterior
             const oldData = patient.toJSON();
 
-            // 3. Ejecutar actualización
             await patient.update(data, { transaction: t });
 
-            // 4. 🕵️‍♂️ DETERMINAR CAMBIOS REALES (Opcional pero recomendado)
-            // Filtramos 'data' para guardar solo lo que el usuario intentó cambiar
             const changesDetected = Object.keys(data).reduce((acc: any, key) => {
                 if (data[key] !== oldData[key]) {
                     acc[key] = data[key];
@@ -461,23 +508,20 @@ export class PatientController {
                 return acc;
             }, {});
 
-            // 5. 🛡️ REGISTRO DE AUDITORÍA
-            // Solo creamos el log si hay un operador identificado y hubo cambios
             if (operatorId && Object.keys(changesDetected).length > 0) {
                 await AuditLog.create({
                     userId: operatorId,
                     action: 'UPDATE',
                     tableName: 'Patients',
                     recordId: id,
-                    oldValues: oldData,      // El objeto completo original
-                    newValues: changesDetected, // Solo los campos que cambiaron
-                    ipAddress: req.ip || req.socket.remoteAddress // Rastro de red
+                    oldValues: oldData,      
+                    newValues: changesDetected, 
+                    ipAddress: req.ip || req.socket.remoteAddress 
                 }, { transaction: t });
             }
 
             await t.commit();
 
-            // 6. LOG DE CONSOLA PARA DESARROLLO
             console.log(`✅ Auditoría: Paciente ${id} actualizado por Usuario ${operatorId}`);
 
             return res.json({ 
@@ -487,7 +531,6 @@ export class PatientController {
             });
 
         } catch (error: any) {
-            // 🚨 Si algo falla, revertimos TODO (Paciente y Log)
             await t.rollback();
             console.error("❌ Error Crítico en updatePatient:", error);
             return res.status(500).json({ 
@@ -507,10 +550,9 @@ export class PatientController {
 
             if (!patient) return res.status(404).json({ success: false, error: 'No encontrado' });
 
-            const oldData = patient.toJSON(); // 🕵️‍♂️ Rescatamos datos antes de destruir
+            const oldData = patient.toJSON(); 
             await patient.destroy(); 
 
-            // 🕵️‍♂️ AUDITORÍA: Eliminación (Crítico)
             if (operatorId) {
                 await AuditLog.create({
                     userId: operatorId, action: 'DELETE', tableName: 'Patients',
@@ -524,7 +566,7 @@ export class PatientController {
         }
     }
 
-    // 8. AUDITORÍA BLINDADA (Lectura de DB, no crea Logs)
+    // 8. AUDITORÍA BLINDADA
     static getAuditStats = async (req: Request, res: Response) => {
         const response = {
             stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
@@ -614,7 +656,6 @@ export class PatientController {
 
             await sequelize.query(cleanQuery, { transaction: t });
             
-            // 🕵️‍♂️ AUDITORÍA: Limpieza de Base de Datos
             if (operatorId) {
                 await AuditLog.create({
                     userId: operatorId, action: 'CLEAN_DUPLICATES', tableName: 'FollowUps',

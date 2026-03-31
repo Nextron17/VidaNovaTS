@@ -75,13 +75,13 @@ export class FollowUpController {
                 return res.status(404).json({ success: false, error: 'No encontrado' });
             }
 
-            // 🕵️‍♂️ 1. CAPTURAR EL PASADO (Cómo estaba antes)
+            // 1. CAPTURAR EL PASADO
             const oldData = followUp.toJSON();
 
             // 2. Ejecutar la actualización en la BD
             await followUp.update(data, { transaction: t });
 
-            // 🕵️‍♂️ 3. DETECTAR LOS CAMBIOS EXACTOS (El "Chisme")
+            // 3. DETECTAR LOS CAMBIOS EXACTOS 
             const changesDetected = Object.keys(data).reduce((acc: any, key) => {
                 // Si el dato que llegó es diferente al que estaba, lo guardamos
                 if (data[key] !== oldData[key] && data[key] !== undefined) {
@@ -90,7 +90,7 @@ export class FollowUpController {
                 return acc;
             }, {});
 
-            // 🛡️ 4. GUARDAR EN LA AUDITORÍA (Solo si realmente cambió algo)
+            // 4. GUARDAR EN LA AUDITORÍA (Solo si realmente cambió algo)
             if (operatorId && Object.keys(changesDetected).length > 0) {
                 // Le pasamos también el nombre y cédula del paciente para que el Frontend lo muestre bonito
                 const patientInfo = followUp.patient ? {

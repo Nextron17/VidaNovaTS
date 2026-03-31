@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import xss from 'xss';
 import { Patient } from '../models/Patient';
 import { FollowUp } from '../models/FollowUp';
+import { MasterCUP } from '../models/MasterCUP'; 
 import { sequelize } from '../../../core/config/db';
 import { CupsController } from '../controllers/CupsController';
 
@@ -54,7 +55,6 @@ export class ImportService {
         // 🛡️ XSS Protection
         str = xss(str); 
 
-        // Unimos los saltos de línea (enters) de las historias clínicas en un solo texto continuo
         str = str.replace(/(\r\n|\n|\r)/gm, " // "); 
         str = str.replace(/\s\s+/g, ' '); 
         
@@ -183,11 +183,33 @@ export class ImportService {
         return null;
     }
 
-    
-    // 🚀 NUEVO: LECTOR CSV MANUAL MULTILÍNEA ROBUSTO
-    // Evita que los Enter (saltos de línea) en las Historias Clínicas rompan la tabla
+    // 🚀 NUEVO: MOTOR LECTOR DE BARRERAS
+    private static detectBarrierFromText(text: string): string | null {
+        if (!text) return null;
+        const t = text.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        const DICCIONARIO_BARRERAS = [
+            { nombre: "FALLA DE CONTACTO", palabras: ["NO CONTESTA", "NUMERO EQUIVOCADO", "APAGADO", "NO SE LOGRA CONTACTO", "INCORRECTO", "BUZON", "NO RESPOND", "NO HAY COMUNICACION"] },
+            { nombre: "FALTA DE AGENDA", palabras: ["SIN AGENDA", "NO HAY AGENDA", "NO HAY DISPONIBILIDAD", "AGENDA CERRADA", "SIN OPORTUNIDAD", "NO TIENE CITA", "FALTA CITA"] },
+            { nombre: "SIN AUTORIZACIÓN EPS", palabras: ["SIN AUTORIZACION", "NO AUTORIZADO", "PENDIENTE AUTORIZACION", "NEGACION", "NEGADO", "NO APROBADO", "ESPERA DE AUTORIZACION"] },
+            { nombre: "PROBLEMA DE CONTRATO RED", palabras: ["SIN CONTRATO", "CONTRATO CERRADO", "PROBLEMA DE RED", "NO HAY CONVENIO", "FUERA DE RED", "NO HAY PRESTADOR"] },
+            { nombre: "PROBLEMA ADMINISTRATIVO", palabras: ["ORDEN VENCIDA", "FALTA ORDEN", "ERROR EN ORDEN", "ACTUALIZAR ORDEN", "MIPRES", "AUDITORIA MEDICA", "ERROR SISTEMA"] },
+            { nombre: "BARRERA DE TRANSPORTE / LEJANÍA", palabras: ["TRANSPORTE", "PASAJES", "DINERO", "LEJANIA", "ZONA RURAL", "VIATICOS", "RECURSOS ECONOMICOS", "IMPOSIBILIDAD DE VIAJAR"] },
+            { nombre: "RECHAZO O CANCELACIÓN PACIENTE", palabras: ["NO ASISTE", "NO LLEGO", "CANCELADO POR PACIENTE", "RECHAZA", "NO DESEA", "DESISTE"] }
+        ];
+
+        for (const barrera of DICCIONARIO_BARRERAS) {
+            if (barrera.palabras.some(palabra => t.includes(palabra))) {
+                return barrera.nombre;
+            }
+        }
+        
+        return null;
+    }
+
+    // LECTOR CSV MANUAL MULTILÍNEA ROBUSTO
     private static parseManualCSV(buffer: Buffer): any[] {
-        console.log("⚠️ Activando Lector Manual CSV Robusto (Soporte para Historias Clínicas Multilínea)...");
+        console.log("⚠️ Activando Lector Manual CSV Robusto...");
         
         let text = buffer.toString('utf-8');
         if (text.indexOf('') !== -1 || text.indexOf('Ã') !== -1) {
@@ -205,7 +227,7 @@ export class ImportService {
             
             if (char === '"') {
                 if (inQuotes && nextChar === '"') {
-                    currentCell += '"'; // Comilla escapada
+                    currentCell += '"'; 
                     i++; 
                 } else {
                     inQuotes = !inQuotes;
@@ -339,7 +361,7 @@ export class ImportService {
                 'tipo_caso': ['tipo_de_caso', 'tipo_caso', 'clasificacion_caso']
             };
 
-            console.log(`🚀 Procesando ${rawData.length} filas (Modo Seguro Multilínea)...`);
+            console.log(`🚀 Procesando ${rawData.length} filas...`);
 
             for (let i = 0; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -395,23 +417,40 @@ export class ImportService {
                         status = 'CANCELADO';
                     } else if ((notaRealizada.length > 2 && !notaRealizada.includes('NO')) || rawStatus.includes('REALIZAD') || rawStatus.includes('CUMPLID') || rawStatus.includes('ATENDID') || rawStatus.includes('FACTURA') || rawStatus.includes('CERRAD') || rawStatus.includes('ENTREGAD') || rawStatus.includes('EJECUTAD') || rawStatus.includes('FINALIZAD') || rawStatus.includes('TERMINAD') || rawStatus.includes('TOMAD') || rawStatus.includes('LEID') || rawStatus.includes('RESULTADO')) {
                         status = 'REALIZADO';
-                    } else if (rawStatus.includes('ASIGNA') || rawStatus.includes('PROGRAMA') || rawStatus.includes('AGENDA') || rawStatus.includes('CITA') || (dAppoint && dAppoint > new Date())) {
-                        status = 'AGENDADO';
-                    } else if (rawStatus.includes('TRAMITE') || rawStatus.includes('GESTION') || rawStatus.includes('AUTORI') || rawStatus.includes('PROCESO') || rawStatus.includes('ESPERA') || rawStatus.includes('REQUERIMIENTO') || rawStatus.includes('SOLICITADO') || rawStatus.includes('ENVIAD') || rawStatus.includes('RADICAD') || rawStatus.includes('DIFERIDO') || rawStatus.includes('AVAL') || rawStatus.includes('CAMBIO DE ORDEN')) {
+                    } else if (rawStatus.includes('TRAMITE') || rawStatus.includes('GESTION') || rawStatus.includes('AUTORI') || rawStatus.includes('PROCESO') || rawStatus.includes('ESPERA') || rawStatus.includes('REQUERIMIENTO') || rawStatus.includes('SOLICITA') || rawStatus.includes('ENVIAD') || rawStatus.includes('RADICAD') || rawStatus.includes('DIFERIDO') || rawStatus.includes('AVAL') || rawStatus.includes('CAMBIO DE ORDEN')) {
                         status = 'EN_GESTION';
+                    } else if (rawStatus.includes('ASIGNA') || rawStatus.includes('PROGRAMA') || rawStatus.includes('AGENDA') || (rawStatus.includes('CITA') && !rawStatus.includes('SOLICITA'))) {
+                        status = 'AGENDADO';
+                    }
+
+                    if (dAppoint && status === 'PENDIENTE') {
+                        status = 'AGENDADO';
+                    }
+                    
+                    if (status === 'AGENDADO' && !dAppoint) {
+                        status = 'PENDIENTE';
                     }
 
                     if (dAppoint && dAppoint < new Date() && status === 'AGENDADO') { status = 'REALIZADO'; }
                     if (status === 'REALIZADO' && !dAppoint) { dAppoint = dRequest; }
 
                     const obsBase = ImportService.cleanText(getVal('obs'));
-                    const barrera = ImportService.cleanText(getVal('barrera'));
+                    let barrera = ImportService.cleanText(getVal('barrera'));
                     const resp = ImportService.cleanText(getVal('responsable'));
                     const tipoCaso = ImportService.cleanText(getVal('tipo_caso'));
                     const cie10Code = ImportService.cleanText(getVal('cie10'));
                     const descDx = ImportService.cleanText(getVal('desc_dx'));
                     const tipoNota = ImportService.cleanText(getVal('tipo_nota')); 
                     
+                    // 🚀 AQUÍ ESTÁ EL CEREBRO DE LAS BARRERAS
+                    if (!barrera || barrera === 'NO' || barrera === '') {
+                        // Si el excel no tiene columna de barreras, tratamos de leerla de la historia clínica
+                        const barreraDetectada = ImportService.detectBarrierFromText(`${obsBase} ${rawStatus} ${tipoNota}`);
+                        if (barreraDetectada) {
+                            barrera = barreraDetectada;
+                        }
+                    }
+
                     let fullObs = obsBase;
                     if (tipoNota) fullObs = `[${tipoNota}] ${fullObs}`;
                     if (barrera && barrera !== 'NO') fullObs += ` | BARRERA: ${barrera}`;
@@ -444,15 +483,40 @@ export class ImportService {
                         if (changed) { await patient.save(); pUpdated++; }
                     }
 
-                    const service = ImportService.cleanText(getVal('servicio'));
-                    const cups = ImportService.cleanText(getVal('cups'));
-                    
-                    let category = 'PENDIENTE'; 
-                    if (service.includes('CONSULTA') || cups.startsWith('890')) {
-                        category = 'Consulta Externa';
+                    let service = ImportService.cleanText(getVal('servicio'));
+                    const rawCups = ImportService.cleanText(getVal('cups')).substring(0, 20);
+
+                    if (!service || service.length < 3) {
+                        service = tipoNota; 
+                    }
+                    if (!service || service.length < 3) {
+                        service = obsBase.substring(0, 100); 
+                    }
+                    if (!service || service.length < 3) {
+                        service = 'SERVICIO IMPORTADO'; 
                     }
                     
-                    if (cups || service || status === 'REALIZADO' || cie10Code || status === 'EN_GESTION' || fullObs) {
+                    let category = 'PENDIENTE'; 
+                    if (service.includes('CONSULTA') || rawCups.startsWith('890')) {
+                        category = 'Consulta Externa';
+                    }
+
+                    let finalCups: string | null = rawCups;
+                    if (finalCups && finalCups !== 'N/A' && finalCups !== '') {
+                        try {
+                            await MasterCUP.findOrCreate({
+                                where: { codigo: finalCups },
+                                defaults: {
+                                    descripcion: service.substring(0, 255) || 'AGREGADO DESDE CARGA MASIVA',
+                                    grupo: category !== 'PENDIENTE' ? category : 'PENDIENTE'
+                                }
+                            });
+                        } catch (cupErr) { }
+                    } else {
+                        finalCups = null;
+                    }
+                    
+                    if (finalCups || service || status === 'REALIZADO' || cie10Code || status === 'EN_GESTION' || fullObs) {
                         const exists = await FollowUp.findOne({
                             where: { patientId: patient.id, serviceName: service.substring(0, 255), dateRequest: dRequest }
                         });
@@ -460,30 +524,26 @@ export class ImportService {
                         if (!exists) {
                             await FollowUp.create({
                                 patientId: patient.id, dateRequest: dRequest, dateAppointment: dAppoint, 
-                                status, cups: cups.substring(0, 20),
-                                serviceName: service.substring(0, 255) || 'SERVICIO IMPORTADO',
+                                status, cups: finalCups,
+                                serviceName: service.substring(0, 255),
                                 eps: epsClean, observation: fullObs, category
                             });
                             fCreated++;
                         } else {
                             let updateData: any = {};
                             
-                            // 1. Si llegó un CUPS y antes estaba vacío, actualizarlo
-                            if (cups && cups !== 'N/A' && (!exists.cups || exists.cups === 'N/A' || exists.cups === '')) {
-                                updateData.cups = cups.substring(0, 20);
+                            if (finalCups && (!exists.cups || exists.cups === 'N/A' || exists.cups === '')) {
+                                updateData.cups = finalCups;
                             }
 
-                            // 2. Si llegó una historia clínica u observación nueva
                             if (fullObs && fullObs.trim() !== '') {
                                 if (!exists.observation || exists.observation === 'Sin observaciones.' || exists.observation === '') {
                                     updateData.observation = fullObs;
                                 } else if (!exists.observation.includes(obsBase.substring(0, 20))) { 
-                                    // Adjuntar la nueva nota a las existentes sin borrar las anteriores
                                     updateData.observation = `${exists.observation} // NUEVA NOTA: ${fullObs}`;
                                 }
                             }
 
-                            // 3. Manejo de estado
                             if ((!exists.category || exists.category === 'PENDIENTE') && category !== 'PENDIENTE') {
                                 updateData.category = category;
                             }
@@ -497,7 +557,6 @@ export class ImportService {
                                 if (dAppoint) updateData.dateAppointment = dAppoint;
                             }
                             
-                            // Solo guardar si realmente hay algo nuevo que inyectar
                             if (Object.keys(updateData).length > 0) {
                                 await exists.update(updateData);
                             }

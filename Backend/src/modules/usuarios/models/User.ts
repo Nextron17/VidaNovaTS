@@ -2,7 +2,7 @@ import { Table, Column, Model, DataType, BeforeCreate, BeforeUpdate, HasMany } f
 import bcrypt from 'bcryptjs';
 import { Patient } from '../../navegacion/models/Patient';
 import { FollowUp } from '../../navegacion/models/FollowUp';
-import { AuditLog } from '../../../core/models/AuditLog'; // 👈 Asegúrate de que la ruta sea correcta
+import { AuditLog } from '../../../core/models/AuditLog'; 
 
 @Table({
     tableName: 'users',
@@ -78,24 +78,22 @@ role!: string;
 
     @Column({ type: DataType.DATE, allowNull: true })
     resetPasswordExpires!: Date | null;
-
-    // ==========================================
-    // ✅ RELACIONES
-    // ==========================================
-
+    
+    // RELACIONES
+    
     @HasMany(() => Patient)
     patients!: Patient[];
 
     @HasMany(() => FollowUp)
     followups!: FollowUp[];
 
-    // 🕵️ REGISTROS DE ACTIVIDAD (Auditoría)
+    // REGISTROS DE ACTIVIDAD (Auditoría)
     @HasMany(() => AuditLog)
     auditLogs!: AuditLog[];
 
-    // ==========================================
-    // ⚡ HOOKS
-    // ==========================================
+    
+    // HOOKS
+    
 
     @BeforeCreate
     @BeforeUpdate
@@ -120,9 +118,9 @@ role!: string;
         }
     }
 
-    // ==========================================
-    // 🛠️ MÉTODOS DE INSTANCIA
-    // ==========================================
+    
+    // MÉTODOS DE INSTANCIA
+    
 
     async checkPassword(password: string): Promise<boolean> {
         return await bcrypt.compare(password, this.password);

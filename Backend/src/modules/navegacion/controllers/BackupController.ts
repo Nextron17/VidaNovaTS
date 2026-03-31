@@ -99,7 +99,7 @@ export class BackupController {
                 { header: 'DIAGNÓSTICO (DX)', key: 'dx', width: 30 },
                 { header: 'TIPO CASO', key: 'tipoCaso', width: 15 },
                 { header: 'RESPONSABLE', key: 'responsable', width: 20 },
-                { header: 'BARRERA DETECTADA', key: 'barrera', width: 25 }, // 👈 Añadí la barrera aquí por si acaso
+                { header: 'BARRERA DETECTADA', key: 'barrera', width: 25 },
                 
                 // OBSERVACIONES
                 { header: 'OBSERVACIÓN LIMPIA', key: 'obsClean', width: 50 },
@@ -131,7 +131,7 @@ export class BackupController {
                 const pat = h.patient;
                 const fullObs = h.observation || '';
 
-                // --- HELPER PARA EXTRAER DATOS OCULTOS ---
+                // HELPER PARA EXTRAER DATOS OCULTOS
                 const extract = (tag: string) => {
                     const regex = new RegExp(`\\|\\s*${tag}:\\s*([^|]+)`, 'i');
                     const match = fullObs.match(regex);
@@ -169,7 +169,7 @@ export class BackupController {
                     obsFull: fullObs
                 });
 
-                // --- COLORES AUTOMÁTICOS SEGÚN ESTADO ---
+                // COLORES AUTOMÁTICOS SEGÚN ESTADO
                 const statusCell = row.getCell('status');
                 const s = (h.status || '').toUpperCase();
 

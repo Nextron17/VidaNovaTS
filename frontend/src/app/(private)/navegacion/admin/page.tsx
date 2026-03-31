@@ -6,7 +6,7 @@ import {
   Search, Filter, ShieldAlert, X, ChartPie,
   MessageCircle, Layers, Info, CheckCircle2,
   Loader2, WifiOff, FileSpreadsheet, ChevronLeft, ChevronRight, Eye, Edit,
-  Calendar, Clock4, AlertCircle, FileText, Syringe, Activity, Stethoscope, FlaskConical, Scissors
+  Calendar, Clock4, AlertCircle, FileText, Syringe, Activity, Stethoscope, FlaskConical, Scissors, Plus, Ban
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 
 import api from "@/src/app/services/api";
-import { getFechaLocal } from "@/src/app/core/utils/dateUtils"; // 👈 1. IMPORTAMOS NUESTRA FUNCIÓN SEGURA
+import { getFechaLocal } from "@/src/app/core/utils/dateUtils"; 
 
 // --- 1. CONSTANTES DE ESTADO ---
 const OPCIONES_ESTADO = [
@@ -72,40 +72,21 @@ const CAC_GROUPS = [
     "25= Tumores secundarios"
 ];
 
-// 🔥 FILTRO COMBINADO
-const OPCIONES_FILTRO = [ 
-    ...MODALIDADES, 
-    ...CAC_GROUPS, 
-    "OTROS", 
-    "PENDIENTE" 
-];
-
-const COLORS_ESTADOS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444']; 
-
-// --- HELPER: ICONO POR MODALIDAD ---
-const getIconByModality = (modality: string) => {
-    const m = (modality || '').toUpperCase();
-    if (m.includes('QUIMIO')) return <Syringe size={12}/>;
-    if (m.includes('RADIO') || m.includes('IMAGEN')) return <Activity size={12}/>;
-    if (m.includes('CONSULTA')) return <Stethoscope size={12}/>;
-    if (m.includes('LAB')) return <FlaskConical size={12}/>;
-    if (m.includes('CIRUGIA')) return <Scissors size={12}/>;
-    return <FileText size={12}/>;
-};
+// 🚀 FIX: AÑADIDOS LOS 5 COLORES PARA QUE LA GRÁFICA NO COLAPSE
+const COLORS_ESTADOS = [
+    '#f97316', // Naranja (Pendiente)
+    '#eab308', // Amarillo (En Gestión)
+    '#3b82f6', // Azul (Agendado)
+    '#10b981', // Verde (Realizado)
+    '#ef4444'  // Rojo (Cancelado)
+]; 
 
 // --- HELPER CORREGIDO: EXTRAER COHORTE ---
 const extractCohort = (obs: string) => {
     if (!obs || typeof obs !== 'string') return "Sin Cohorte";
-    
     const match = obs.match(/(?:COHORTE|DX SUGERIDO|CAC):\s*([^|]+)/i);
-    if (match) {
-        return match[1].trim().replace("= CAC", "").replace("=", " "); 
-    }
-    
-    if (obs.length > 3) {
-        return obs.substring(0, 20) + (obs.length > 20 ? "..." : "");
-    }
-    
+    if (match) return match[1].trim().replace("= CAC", "").replace("=", " "); 
+    if (obs.length > 3) return obs.substring(0, 20) + (obs.length > 20 ? "..." : "");
     return "Sin Cohorte";
 };
 
@@ -144,7 +125,8 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [patients, setPatients] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({ total: 0, pendientes: 0, realizados: 0, agendados: 0 });
+  
+  const [stats, setStats] = useState<any>({ total: 0, pendientes: 0, en_gestion: 0, agendados: 0, realizados: 0, cancelados: 0 });
   const [chartData, setChartData] = useState<any[]>([]);
   const [barrerasData, setBarrerasData] = useState<any[]>([]);
   
@@ -153,22 +135,24 @@ export default function AdminDashboardPage() {
   const [totalPages, setTotalPages] = useState(1);
   
   const [showMassModal, setShowMassModal] = useState(false);
-  const [filtros, setFiltros] = useState({ 
-    eps: "TODAS", 
-    cohorte: [] as string[], 
-    fechaIni: "", 
-    fechaFin: "", 
-    estado: "TODOS" 
-  });
-  
+  const [filtros, setFiltros] = useState({ eps: "TODAS", cohorte: [] as string[], fechaIni: "", fechaFin: "", estado: "TODOS" });
   const [seleccionados, setSeleccionados] = useState<number[]>([]);
-  const [tabEstado, setTabEstado] = useState<'PENDIENTE' | 'AGENDADO' | 'REALIZADO' | 'TODOS'>('PENDIENTE');
+  
+  const [tabEstado, setTabEstado] = useState<'PENDIENTE' | 'EN_GESTION' | 'AGENDADO' | 'REALIZADO' | 'CANCELADO' | 'TODOS'>('PENDIENTE');
   const [massUpdateData, setMassUpdateData] = useState({ status: "", observation: "" });
 
   const [isClient, setIsClient] = useState(false);
+
+  // 🚀 ESTADO Y FUNCIÓN DE LA MINI PANTALLA (TOAST)
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+      setToast({ show: true, message: msg, type });
+      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2500); 
+  };
+
   useEffect(() => { setIsClient(true); }, []);
 
-  // --- FETCH DATA CON DOBLE LLAMADA (ESTADÍSTICAS + TABLA) ---
   const fetchData = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
@@ -178,13 +162,10 @@ export default function AdminDashboardPage() {
         if (filtros.eps !== 'TODAS') params.eps = filtros.eps;
         if (filtros.fechaIni) params.startDate = filtros.fechaIni;
         if (filtros.fechaFin) params.endDate = filtros.fechaFin;
-        
         if (filtros.cohorte.length > 0) params.cohorte = filtros.cohorte.join(','); 
-        
         if (tabEstado !== 'TODOS') params.status = tabEstado;
         else if (filtros.estado !== 'TODOS') params.status = filtros.estado;
 
-        // 🔥 LA MAGIA: Hacemos dos peticiones simultáneas (Tabla y Estadísticas)
         const [resData, resStats] = await Promise.all([
             api.get('/navegacion/patients', { params }),
             api.get('/navegacion/patients', { params: { ...params, onlyStats: 'true' } }) 
@@ -193,14 +174,10 @@ export default function AdminDashboardPage() {
         const data = resData.data;
         const statsData = resStats.data;
 
-        // 1. LLENAR LA TABLA
         if (data.success) {
             const rawData = data.data || [];
-            
             const mappedData = rawData.map((p: any) => {
                 const f = (p.followups && p.followups.length > 0) ? p.followups[0] : {}; 
-                
-                // 👈 2. APLICAMOS LA FUNCIÓN SEGURA AQUÍ (getFechaLocal)
                 const fechaSolStr = f.dateRequest || p.createdAt || getFechaLocal();
                 const fechaSol = new Date(fechaSolStr);
                 const hoy = new Date();
@@ -208,6 +185,8 @@ export default function AdminDashboardPage() {
 
                 return {
                     id: p.id,
+                    patientId: p.id,
+                    followUpId: f.id,
                     paciente: `${p.firstName || ''} ${p.lastName || ''}`.trim() || "PACIENTE SIN NOMBRE",
                     doc: p.documentNumber || "S.N",
                     eps: p.insurance || "SIN EPS",
@@ -228,9 +207,15 @@ export default function AdminDashboardPage() {
             setTotalPages(data.pagination?.totalPages || 1);
         }
 
-        // 2. LLENAR LOS KPIs Y GRÁFICAS
         if (statsData.success && statsData.stats) {
-            setStats(statsData.stats);
+            setStats({
+                total: statsData.stats.total || 0,
+                pendientes: statsData.stats.pendientes || 0,
+                en_gestion: statsData.stats.en_gestion || statsData.stats.enGestion || 0, 
+                agendados: statsData.stats.agendados || 0,
+                realizados: statsData.stats.realizados || 0,
+                cancelados: statsData.stats.cancelados || 0 
+            });
             
             if (statsData.stats.topProcedures) {
                 const safeStats = statsData.stats.topProcedures.map((item: any) => ({
@@ -243,15 +228,10 @@ export default function AdminDashboardPage() {
                 });
                 setChartData(validStats.length > 0 ? validStats : safeStats);
             }
-
-            // Llenamos el gráfico de Barreras
-            if (statsData.stats.topBarreras) {
-                setBarrerasData(statsData.stats.topBarreras);
-            }
+            if (statsData.stats.topBarreras) setBarrerasData(statsData.stats.topBarreras);
         }
 
     } catch (error: any) {
-        console.error("❌ Error API:", error);
         setErrorMsg(error.response?.status === 401 ? "Sesión expirada." : "Error al conectar con el servidor.");
         setPatients([]);
     } finally {
@@ -266,10 +246,10 @@ export default function AdminDashboardPage() {
     setLoading(true);
     try {
         const res = await api.post('/navegacion/patients/fix-categories');
-        alert(res.data.message);
+        showToast(res.data.message || "Base de datos normalizada con éxito.", "success"); // 🚀 TOAST AQUÍ
         fetchData();
     } catch (error) {
-        alert("Error ejecutando la reparación.");
+        showToast("Error ejecutando la reparación.", "error"); // 🚀 TOAST AQUÍ
     } finally {
         setLoading(false);
     }
@@ -285,30 +265,13 @@ export default function AdminDashboardPage() {
         });
         
         if (res.data.success) {
-            alert("✅ Registros actualizados correctamente.");
+            showToast("¡Realizado! Registros actualizados correctamente.", "success"); // 🚀 TOAST AQUÍ
             setShowMassModal(false);
             setSeleccionados([]);
             fetchData();
         }
     } catch (error) {
-        alert("Error de conexión o permisos.");
-    }
-  };
-
-  const getRowStyle = (estado: string, dias: number, meta: number) => {
-    if (estado === "REALIZADO") return "border-l-4 border-emerald-500 bg-emerald-50/10 hover:bg-emerald-50/20";
-    if (estado === "CANCELADO") return "border-l-4 border-red-500 bg-red-50/10 opacity-70 hover:opacity-100";
-    if (dias > meta) return "border-l-4 border-red-500 bg-red-50/10 hover:bg-red-50/20";
-    return "border-l-4 border-slate-200 hover:bg-slate-50";
-  };
-
-  const getBadgeStyle = (estado: string) => {
-    switch (estado) {
-        case 'REALIZADO': return 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-600/20';
-        case 'AGENDADO': return 'bg-blue-100 text-blue-700 ring-1 ring-blue-600/20';
-        case 'EN_GESTION': return 'bg-amber-100 text-amber-700 ring-1 ring-amber-600/20';
-        case 'CANCELADO': return 'bg-red-100 text-red-700 ring-1 ring-red-600/20';
-        default: return 'bg-slate-100 text-slate-600 ring-1 ring-slate-600/20';
+        showToast("Error de conexión o permisos.", "error"); // 🚀 TOAST AQUÍ
     }
   };
 
@@ -323,15 +286,32 @@ export default function AdminDashboardPage() {
 
   const DATA_ESTADOS = [
     { name: 'Pendiente', value: Number(stats?.pendientes || 0) },
+    { name: 'En Gestión', value: Number(stats?.en_gestion || 0) },
     { name: 'Agendado', value: Number(stats?.agendados || 0) },
     { name: 'Realizado', value: Number(stats?.realizados || 0) },
+    { name: 'Cancelado', value: Number(stats?.cancelados || 0) }
   ];
 
   if (!isClient) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 font-sans text-slate-800 p-6 md:p-8">
+    <div className="min-h-screen bg-slate-50/50 pb-24 font-sans text-slate-800 p-6 md:p-8 relative">
       
+      {/* 🚀 TOAST NOTIFICATION (MINI PANTALLA FLOTANTE) */}
+      <div className={`fixed top-8 right-8 z-[9999] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
+          <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border ${
+              toast.type === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' : 
+              toast.type === 'error' ? 'bg-rose-600 border-rose-500 text-white' : 
+              'bg-blue-600 border-blue-500 text-white'
+          }`}>
+              {toast.type === 'success' && <CheckCircle2 size={24} />}
+              {toast.type === 'error' && <X size={24} />}
+              {toast.type === 'info' && <Info size={24} />}
+              <p className="font-bold text-sm tracking-wide">{toast.message}</p>
+          </div>
+      </div>
+      {/* FIN DEL TOAST */}
+
       {/* 1. HEADER */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-10">
         <div>
@@ -398,7 +378,6 @@ export default function AdminDashboardPage() {
             <FilterSelect label="EPS" options={OPCIONES_EPS} value={filtros.eps} onChange={(e:any) => setFiltros({...filtros, eps: e.target.value})} />
           </div>
 
-          {/* SELECTOR MÚLTIPLE DE MODALIDADES Y CACs */}
           <div className="md:col-span-12 lg:col-span-8">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 block flex justify-between">
                 <span>Filtro por Modalidad / Diagnóstico (CAC)</span>
@@ -409,7 +388,7 @@ export default function AdminDashboardPage() {
             <div className="flex flex-wrap gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[50px] transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 items-center">
               {filtros.cohorte.map((c) => (
                 <span key={c} className="bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm animate-in fade-in zoom-in duration-200">
-                  {c.replace('=', '').replace('CAC ', '')} {/* Visualmente más corto */}
+                  {c.replace('=', '').replace('CAC ', '')} 
                   <button onClick={() => setFiltros({ ...filtros, cohorte: filtros.cohorte.filter(item => item !== c) })} className="hover:bg-slate-600 rounded-full p-0.5 transition-colors">
                     <X size={12} />
                   </button>
@@ -426,8 +405,6 @@ export default function AdminDashboardPage() {
                 }}
               >
                 <option value="" disabled>+ Seleccionar...</option>
-                
-                {/* GRUPO MODALIDADES */}
                 <optgroup label="--- MODALIDADES ---">
                     {MODALIDADES.map(opt => (
                         <option key={opt} value={opt} disabled={filtros.cohorte.includes(opt)}>{opt}</option>
@@ -435,8 +412,6 @@ export default function AdminDashboardPage() {
                     <option value="OTROS">OTROS</option>
                     <option value="PENDIENTE">PENDIENTE</option>
                 </optgroup>
-
-                {/* GRUPO CAC */}
                 <optgroup label="--- DIAGNÓSTICOS (CAC) ---">
                     {CAC_GROUPS.map(opt => (
                         <option key={opt} value={opt} disabled={filtros.cohorte.includes(opt)}>{opt}</option>
@@ -469,11 +444,12 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 3. KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        <KpiItem title="TOTAL REGISTROS" value={stats?.total || 0} sub="Base de datos global" color="blue" icon={<Layers size={24}/>} />
-        <KpiItem title="GESTIÓN COMPLETA" value={stats?.realizados || 0} sub="Pacientes atendidos" color="green" icon={<CheckCircle2 size={24}/>} />
-        <KpiItem title="PENDIENTES" value={stats?.pendientes || 0} sub="Requieren gestión" color="orange" icon={<AlertCircle size={24}/>} />
-        <KpiItem title="AGENDADOS" value={stats?.agendados || 0} sub="Cita programada" color="purple" icon={<Calendar size={24}/>} />
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <KpiItem title="TOTALES" value={stats?.total || 0} sub="Base de datos" color="gray" icon={<Layers size={24}/>} />
+        <KpiItem title="PENDIENTES" value={stats?.pendientes || 0} sub="Sin gestionar" color="orange" icon={<AlertCircle size={24}/>} />
+        <KpiItem title="EN GESTIÓN" value={stats?.en_gestion || 0} sub="Trámite activo" color="yellow" icon={<Clock4 size={24}/>} />
+        <KpiItem title="AGENDADOS" value={stats?.agendados || 0} sub="Cita programada" color="blue" icon={<Calendar size={24}/>} />
+        <KpiItem title="REALIZADOS" value={stats?.realizados || 0} sub="Atendidos" color="green" icon={<CheckCircle2 size={24}/>} />
       </div>
 
       {/* 4. GRÁFICAS */}
@@ -510,7 +486,6 @@ export default function AdminDashboardPage() {
             </div>
         </div>
 
-        {/* 🚀 NUEVA GRÁFICA DE BARRERAS */}
         <div className="col-span-1 lg:col-span-3 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
             <h4 className="text-sm font-bold text-red-600 mb-6 flex items-center gap-2">
                 Barreras Frecuentes
@@ -537,11 +512,12 @@ export default function AdminDashboardPage() {
 
       {/* 5. TABLA DE DATOS */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* TABS */}
-        <div className="flex border-b border-slate-100 px-6 pt-4 gap-6 overflow-x-auto">
+        <div className="flex border-b border-slate-100 px-6 pt-4 gap-6 overflow-x-auto no-scrollbar">
             <TabButton label="Pendientes" active={tabEstado === 'PENDIENTE'} onClick={() => setTabEstado('PENDIENTE')} count={stats.pendientes} color="orange" />
+            <TabButton label="En Gestión" active={tabEstado === 'EN_GESTION'} onClick={() => setTabEstado('EN_GESTION')} count={stats.en_gestion} color="yellow" />
             <TabButton label="Agendados" active={tabEstado === 'AGENDADO'} onClick={() => setTabEstado('AGENDADO')} count={stats.agendados} color="blue" />
             <TabButton label="Realizados" active={tabEstado === 'REALIZADO'} onClick={() => setTabEstado('REALIZADO')} count={stats.realizados} color="green" />
+            <TabButton label="Cancelados" active={tabEstado === 'CANCELADO'} onClick={() => setTabEstado('CANCELADO')} count={stats.cancelados} color="red" />
             <TabButton label="Todos" active={tabEstado === 'TODOS'} onClick={() => setTabEstado('TODOS')} count={stats.total} color="gray" />
         </div>
 
@@ -567,8 +543,7 @@ export default function AdminDashboardPage() {
                     <div className="bg-slate-50 p-4 rounded-full mb-3">
                         <Search size={32} className="text-slate-300"/>
                     </div>
-                    <p className="text-slate-500 font-medium">No se encontraron registros.</p>
-                    <p className="text-slate-400 text-xs mt-1">Intenta ajustar los filtros de búsqueda o cambia la pestaña a "Todos".</p>
+                    <p className="text-slate-500 font-medium">No se encontraron registros en esta categoría.</p>
                 </div>
             )}
 
@@ -578,24 +553,21 @@ export default function AdminDashboardPage() {
                         <th className="px-6 py-4 w-12 text-center"><input type="checkbox" onChange={seleccionarTodo} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"/></th>
                         <th className="px-4 py-4">PACIENTE</th>
                         <th className="px-4 py-4">SERVICIO / CUPS</th>
-                        <th className="px-4 py-4 text-center">ESTADO & FECHAS</th>
                         <th className="px-4 py-4 text-center">ESTADO</th>
+                        <th className="px-4 py-4 text-left">FECHAS</th>
                         <th className="px-4 py-4 text-center">TIEMPO</th>
-                        <th className="px-6 py-4 text-right">ACCIÓN</th>
+                        <th className="px-4 py-4">OBSERVACIÓN</th>
+                        <th className="px-6 py-4 text-center">ACCIÓN</th>
                     </tr>
                 </thead>
                 
-
                 <tbody className="divide-y divide-slate-100 text-sm">
                     {patients.map((row) => (
                         <tr key={row.id} className={`transition-all duration-150 hover:bg-slate-50 ${row.estado === 'CANCELADO' ? 'opacity-70' : ''}`}>
-                            
-                            {/* 1. Checkbox */}
                             <td className="px-6 py-4 text-center">
                                 <input type="checkbox" checked={seleccionados.includes(row.id)} onChange={() => toggleSeleccion(row.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"/>
                             </td>
                             
-                            {/* 2. Paciente y Cédula */}
                             <td className="px-4 py-4">
                                 <div className="font-bold text-slate-800 text-xs uppercase">{row.paciente}</div>
                                 <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
@@ -604,7 +576,6 @@ export default function AdminDashboardPage() {
                                 </div>
                             </td>
                             
-                            {/* 3. SERVICIO / CUPS (LIMPIO Y ESPECÍFICO) */}
                             <td className="px-4 py-4">
                                 <div className="text-xs font-bold text-slate-700 uppercase tracking-tight">
                                     {row.modalidad.includes('=') || row.modalidad.includes('CAC') ? 'ONCOLOGÍA' : row.modalidad}
@@ -616,22 +587,25 @@ export default function AdminDashboardPage() {
                                 )}
                             </td>
                             
-                            {/* 4. Estado */}
                             <td className="px-4 py-4 text-center">
-                                <span className={`text-[11px] font-bold uppercase ${row.estado.includes('REALIZADO') ? 'text-emerald-600' : 'text-slate-700'}`}>
+                                <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider whitespace-nowrap ${
+                                    row.estado.includes('REALIZADO') ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 
+                                    row.estado.includes('EN_GESTION') ? 'bg-yellow-50 text-yellow-600 border border-yellow-200' : 
+                                    row.estado.includes('AGENDADO') ? 'bg-blue-50 text-blue-600 border border-blue-200' : 
+                                    row.estado.includes('CANCELADO') ? 'bg-red-50 text-red-600 border border-red-200' : 
+                                    'bg-orange-50 text-orange-600 border border-orange-200'
+                                }`}>
                                     {row.estado.replace('_', ' ')}
                                 </span>
                             </td>
                             
-                            {/* 5. Fechas */}
                             <td className="px-4 py-4 text-left">
-                                <div className="text-[11px] text-slate-600 font-medium">
+                                <div className="text-[11px] text-slate-600 font-medium whitespace-nowrap">
                                     <div>Sol: {row.fecha_sol}</div>
                                     {row.fecha_cita !== '---' && <div className="mt-0.5 text-blue-600">Cita: {row.fecha_cita}</div>}
                                 </div>
                             </td>
                             
-                            {/* 6. Tiempos */}
                             <td className="px-4 py-4 text-center">
                                 <div className="flex flex-col items-center">
                                     <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${row.dias > row.meta ? 'text-red-600 bg-red-50 ring-1 ring-red-100' : 'text-slate-600 bg-slate-100'}`}>
@@ -640,28 +614,35 @@ export default function AdminDashboardPage() {
                                 </div>
                             </td>
                             
-                            {/* 7. Observaciones */}
                             <td className="px-4 py-4">
                                 <div className="text-[11px] text-slate-600 truncate max-w-[200px]" title={row.obs}>
                                     {row.obs || '-'}
                                 </div>
                             </td>
                             
-                            {/* 8. Acciones */}
                             <td className="px-6 py-4">
                                 <div className="flex justify-center gap-2">
-                                    <Link href={`/navegacion/admin/pacientes/perfil?id=${row.patientId}`} className="text-slate-400 hover:text-blue-600 transition-all" title="Ver Perfil"><Eye size={16}/></Link>
-                                    <Link href={`/navegacion/admin/gestion?id=${row.id}`} className="text-slate-400 hover:text-orange-500 transition-all" title="Gestionar"><Edit size={16}/></Link>
+                                    <Link href={`/navegacion/admin/pacientes/perfil?id=${row.patientId}`} className="text-slate-400 hover:text-blue-600 transition-all" title="Ver Perfil">
+                                        <Eye size={16}/>
+                                    </Link>
+                                    
+                                    {row.followUpId ? (
+                                        <Link href={`/navegacion/admin/gestion?id=${row.followUpId}`} className="text-slate-400 hover:text-orange-500 transition-all" title="Gestionar">
+                                            <Edit size={16}/>
+                                        </Link>
+                                    ) : (
+                                        <Link href={`/navegacion/admin/gestion/nuevo?patientId=${row.patientId}`} className="text-slate-400 hover:text-emerald-500 transition-all" title="Nueva Gestión">
+                                            <Plus size={16}/>
+                                        </Link>
+                                    )}
                                 </div>
                             </td>
-                            
                         </tr>
                     ))}
                 </tbody>
             </table>
         </div>
         
-        {/* PAGINACIÓN */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
             <span className="text-xs font-bold text-slate-400 uppercase">Mostrando página {page} de {totalPages}</span>
             <div className="flex gap-2">
@@ -671,26 +652,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* FAB (Botón Flotante) */}
-      {seleccionados.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 duration-300">
-            <button 
-                onClick={() => setShowMassModal(true)}
-                className="bg-slate-900 text-white pl-6 pr-8 py-4 rounded-full shadow-2xl flex items-center gap-4 hover:bg-black transition-all font-bold group border border-slate-700/50"
-            >
-                <div className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-inner">
-                    {seleccionados.length}
-                </div>
-                <div className="flex flex-col items-start leading-none">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Acción Masiva</span>
-                    <span className="text-sm">Gestionar Seleccionados</span>
-                </div>
-                <Layers size={20} className="text-slate-400 group-hover:text-white transition-colors"/>
-            </button>
-        </div>
-      )}
-
-      {/* MODAL GESTIÓN MASIVA */}
       {showMassModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
@@ -712,9 +673,11 @@ export default function AdminDashboardPage() {
                             <label className="text-[11px] font-bold text-slate-500 uppercase mb-2 block">Cambiar Estado</label>
                             <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer" onChange={(e) => setMassUpdateData({...massUpdateData, status: e.target.value})}>
                                 <option value="">-- Mantener estado actual --</option>
+                                <option value="PENDIENTE">🟠 Pendiente</option>
                                 <option value="EN_GESTION">🟡 En Gestión</option>
                                 <option value="AGENDADO">🔵 Agendado</option>
                                 <option value="REALIZADO">🟢 Realizado</option>
+                                <option value="CANCELADO">🔴 Cancelado</option>
                             </select>
                         </div>
                         <div>
@@ -738,16 +701,15 @@ export default function AdminDashboardPage() {
 }
 
 // --- COMPONENTES AUXILIARES ---
-
 function FilterSelect({ label, options, type = "text", value, onChange }: any) {
     return (
         <div className="w-full">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 block pl-1">{label}</label>
             {type === 'date' ? (
-                <input type="date" className="w-full py-3 px-3 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" value={value} onChange={onChange}/>
+                <input type="date" className="w-full py-3 px-3 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all" value={value} onChange={onChange}/>
             ) : (
                 <div className="relative">
-                    <select className="w-full py-3 px-3 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer" value={value} onChange={onChange}>
+                    <select className="w-full py-3 px-3 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl text-slate-700 outline-none appearance-none cursor-pointer" value={value} onChange={onChange}>
                         <option value="TODAS">Todos</option>
                         {options?.map((opt: any, idx: number) => {
                             const val = typeof opt === 'object' ? opt.value : opt;
@@ -755,9 +717,7 @@ function FilterSelect({ label, options, type = "text", value, onChange }: any) {
                             return <option key={idx} value={val}>{lbl}</option>;
                         })}
                     </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <ChevronRight size={14} className="rotate-90"/>
-                    </div>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronRight size={14} className="rotate-90"/></div>
                 </div>
             )}
         </div>
@@ -765,13 +725,14 @@ function FilterSelect({ label, options, type = "text", value, onChange }: any) {
 }
 
 function KpiItem({ title, value, sub, color, icon }: any) {
-    const colorStyles: any = {
-        blue: "bg-blue-50 text-blue-600",
-        green: "bg-emerald-50 text-emerald-600",
-        orange: "bg-orange-50 text-orange-600",
-        purple: "bg-purple-50 text-purple-600"
+    const colorStyles: any = { 
+        blue: "bg-blue-50 text-blue-600", 
+        green: "bg-emerald-50 text-emerald-600", 
+        orange: "bg-orange-50 text-orange-600", 
+        yellow: "bg-yellow-50 text-yellow-600",
+        purple: "bg-indigo-50 text-indigo-600",
+        gray: "bg-slate-100 text-slate-700"
     };
-
     return (
         <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all group">
             <div className="flex justify-between items-start mb-4">
@@ -791,6 +752,8 @@ function TabButton({ label, active, onClick, color, count }: any) {
         orange: "text-orange-600 border-orange-500 bg-orange-50/50", 
         blue: "text-blue-600 border-blue-500 bg-blue-50/50", 
         green: "text-emerald-600 border-emerald-500 bg-emerald-50/50", 
+        red: "text-red-600 border-red-500 bg-red-50/50", 
+        yellow: "text-yellow-600 border-yellow-500 bg-yellow-50/50", 
         gray: "text-slate-800 border-slate-800 bg-slate-50" 
     } as Record<string, string>)[color] || "";
 
@@ -798,6 +761,8 @@ function TabButton({ label, active, onClick, color, count }: any) {
         orange: "bg-orange-100 text-orange-700",
         blue: "bg-blue-100 text-blue-700",
         green: "bg-emerald-100 text-emerald-700",
+        red: "bg-red-100 text-red-700",
+        yellow: "bg-yellow-100 text-yellow-700",
         gray: "bg-slate-200 text-slate-700"
     } as Record<string, string>)[color] || "bg-slate-100";
 

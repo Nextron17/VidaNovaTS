@@ -15,8 +15,7 @@ export class CupsController {
     }
 
     public static async runAutoCategorization() {
-        console.log("🌱 EJECUTANDO CLASIFICACIÓN V18 (JERARQUÍA EXACTA ASMET SALUD)...");
-        // Evita que "Consulta de Cirugía" termine en "Cirugía".
+        console.log("EJECUTANDO CLASIFICACIÓN");
         const REGLAS_CLASIFICACION = [
             {
                 grupo: 'Consulta Externa',
@@ -28,7 +27,7 @@ export class CupsController {
             },
             {
                 grupo: 'Medicamentos',
-                palabras: [' MG', ' MG/', 'MG/', ' ML', ' ML/', '/ML', 'SOL INY', 'AMPX', 'TAB -', 'LAPROFF', 'ECAR', 'CAPSULA', 'JARABE', 'SOL ORL', 'GTS ', 'GOTAS', 'TABLETA', 'AMPOLLA', 'SUSPENSION', 'SULFATO FERROSO', 'HIERRO SACARATO', 'DEXAMETASONA', 'HIDROXIUREA', 'ACIDO FOLICO', 'VITAMINA D']
+                palabras: [' MG', ' MG/', 'MG/', ' ML', ' ML/', '/ML', 'SOL INY', 'AMPX', 'TAB -', 'LAPROFF', 'ECAR', 'CAPSULA', 'JARABE', 'SOL ORL', 'GTS ', 'GOTAS', 'TABLETA', 'AMPOLLA', 'SUSPENSION', 'SULFATO FERROSO', 'HIERRO SACARATO', 'FERROTERAPIA', 'DEXAMETASONA', 'HIDROXIUREA', 'ACIDO FOLICO', 'VITAMINA D']
             },
             {
                 grupo: 'Quimioterapia',
@@ -94,7 +93,6 @@ export class CupsController {
 
         let updatedCount = 0;
 
-        // 🚀 PASO 1: CLASIFICAR EL DICCIONARIO (MASTERCUP)
         const pendingDictionary = await MasterCUP.findAll({
             where: { grupo: 'PENDIENTE' }
         });
@@ -103,7 +101,6 @@ export class CupsController {
             const texto = CupsController.normalizeText(dictRecord.descripcion || '');
             let newCategory = 'Otros'; 
             
-            // Evaluamos en estricto orden
             for (const regla of REGLAS_CLASIFICACION) {
                 if (regla.palabras.some(p => texto.includes(p))) {
                     newCategory = regla.grupo;
@@ -114,7 +111,6 @@ export class CupsController {
         }
         console.log(`✅ DICCIONARIO ACTUALIZADO: ${pendingDictionary.length} códigos clasificados.`);
 
-        // 🚀 PASO 2: CLASIFICAR LAS CITAS DE LOS PACIENTES (FOLLOWUP)
         const recordsToCategorize = await FollowUp.findAll({
             attributes: ['id', 'serviceName', 'category', 'observation'],
             where: {
@@ -131,11 +127,12 @@ export class CupsController {
             const transaction = await sequelize.transaction();
             try {
                 for (const record of recordsToCategorize) {
-                    const texto = CupsController.normalizeText(record.serviceName || '');
+                    const textoCompleto = `${record.serviceName || ''} ${record.observation || ''}`;
+                    const texto = CupsController.normalizeText(textoCompleto);
+                    
                     let newCategory = 'Oncología';
                     let foundModality = false;
 
-                    // Evaluamos en estricto orden
                     for (const regla of REGLAS_CLASIFICACION) {
                         if (regla.palabras.some(p => texto.includes(p))) {
                             newCategory = regla.grupo;
@@ -144,7 +141,6 @@ export class CupsController {
                         }
                     }
                     
-                    // Fallback
                     if (!foundModality) {
                         if (texto.includes('PROCEDIMIENTO') || texto.includes('DISPOSITIVO') || texto.includes('TUTOR') || texto.includes('PLACA') || texto.includes('TORNILLO')) {
                             newCategory = 'Cirugía';
@@ -155,7 +151,6 @@ export class CupsController {
                         }
                     }
 
-                    // Detectar Diagnóstico CAC en el servicio
                     let detectedDiagnosis = null;
                     for (const [cac, palabras] of Object.entries(DIAGNOSTICOS)) {
                         if (palabras.some(p => texto.includes(p))) {
@@ -164,7 +159,6 @@ export class CupsController {
                         }
                     }
 
-                    // Preparar Observación
                     let newObservation = record.observation || '';
                     let needsUpdate = false;
 
@@ -183,10 +177,7 @@ export class CupsController {
                         }
 
                         await FollowUp.update(
-                            { 
-                                category: newCategory,
-                                observation: newObservation 
-                            },
+                            { category: newCategory, observation: newObservation },
                             { where: { id: record.id }, transaction }
                         );
                         updatedCount++;
@@ -219,12 +210,9 @@ export class CupsController {
         }
     }
 
-    // 🚀 LECTURA DESDE EL DICCIONARIO OFICIAL MASTERCUP
     static getCups = async (req: Request, res: Response) => {
         try {
-            const cups = await MasterCUP.findAll({
-                order: [['codigo', 'ASC']] 
-            });
+            const cups = await MasterCUP.findAll({ order: [['codigo', 'ASC']] });
             res.json({ 
                 success: true, 
                 data: cups.map((c: any) => ({
@@ -240,21 +228,17 @@ export class CupsController {
         }
     }
 
-    // 🚀 ACTUALIZACIÓN MASIVA EN DICCIONARIO Y PACIENTES
     static bulkUpdate = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
             const { ids, grupo } = req.body;
             if (!ids || !grupo) { await t.rollback(); return res.status(400).json({ success: false }); }
             
-            // 1. Actualizar el Diccionario
             await MasterCUP.update({ grupo }, { where: { id: { [Op.in]: ids } }, transaction: t });
 
-            // 2. Obtener los códigos afectados
             const targetCups = await MasterCUP.findAll({ where: { id: { [Op.in]: ids } }, transaction: t });
             const cupsCodes = targetCups.map(c => c.codigo);
 
-            // 3. Replicar la categoría en las citas de los pacientes
             if (cupsCodes.length > 0) {
                 await FollowUp.update({ category: grupo }, { where: { cups: { [Op.in]: cupsCodes } }, transaction: t });
             }
@@ -275,16 +259,60 @@ export class CupsController {
         } catch (error) { res.status(500).json({ success: false }); }
     }
 
+    static syncCups = async (req: Request, res: Response) => {
+        try {
+            // 1. Respondemos rápido al frontend para que no se congele la pantalla
+            res.status(202).json({ 
+                success: true, 
+                message: "Sincronización iniciada en segundo plano. Esto puede tomar unos minutos." 
+            });
+
+            // 2. Ejecutamos la tarea pesada en segundo plano
+            setTimeout(async () => {
+                try {
+                    console.log("⚙️ [BACKGROUND TASK] Iniciando Sincronización Masiva de Categorías...");
+                    await CupsController.runAutoCategorization();
+                    console.log("✅ [BACKGROUND TASK] Sincronización finalizada con éxito.");
+                } catch (bgError) {
+                    console.error("❌ [BACKGROUND TASK] Error en sincronización:", bgError);
+                }
+            }, 0);
+
+        } catch (error: any) {
+            console.error("❌ Error al iniciar sincronización:", error);
+            res.status(500).json({ success: false, error: 'Error interno del servidor.' });
+        }
+    }
+
+    // LÓGICA DE IMPORTACIÓN EN SEGUNDO PLANO AÑADIDA AQUÍ
     static importCupsFile = async (req: Request, res: Response) => {
         try {
             if (!req.file) {
                 return res.status(400).json({ success: false, error: 'Falta el archivo.' });
             }
-            
-            const result = await CupsImportService.processCupsExcel(req.file.buffer);
-            res.json({ success: true, message: `Se importaron ${result.totalProcessed} códigos exitosamente.` });
+
+            const fileBuffer = Buffer.from(req.file.buffer);
+
+            // Respondemos rápido al frontend
+            res.status(202).json({ 
+                success: true, 
+                message: 'Archivo recibido. Procesando códigos CUPS en segundo plano...' 
+            });
+
+            // Procesamos la carga masiva en el "Background"
+            setTimeout(async () => {
+                try {
+                    console.log("⚙️ [BACKGROUND TASK] Importando Maestro de CUPS...");
+                    await CupsImportService.processCupsExcel(fileBuffer);
+                    console.log("✅ [BACKGROUND TASK] Importación de CUPS finalizada con éxito.");
+                } catch (bgError) {
+                    console.error("❌ [BACKGROUND TASK] Error en importación de CUPS:", bgError);
+                }
+            }, 0);
+
         } catch (error: any) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("❌ Error recibiendo archivo CUPS:", error);
+            res.status(500).json({ success: false, error: 'Error interno al recibir el archivo.' });
         }
     }
 }

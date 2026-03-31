@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 import colors from 'colors';
 import { createClient } from '@supabase/supabase-js';
 
-// 1. IMPORTACIÓN DE MODELOS
 import { User } from '../../modules/usuarios/models/User';
 import { Patient } from '../../modules/navegacion/models/Patient';
 import { FollowUp } from '../../modules/navegacion/models/FollowUp';
@@ -37,7 +36,6 @@ export const sequelize = new Sequelize({
     username: dbUser,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'postgres',
-    // 🚀 ORDEN DE MODELOS: MasterCUP se agrega para permitir relaciones
     models: [User, Patient, MasterCUP, FollowUp, AuditLog], 
     logging: false,
     dialectOptions: {
@@ -45,14 +43,14 @@ export const sequelize = new Sequelize({
             require: true, 
             rejectUnauthorized: false 
         },
-        // ⏳ TIEMPO DE CONSULTA SQL: 1 HORA (3,600,000 ms) para proteger la importación masiva
+        // TIEMPO DE CONSULTA SQL: 1 HORA (3,600,000 ms) para proteger la importación masiva
         statement_timeout: 3600000, 
         options: projectID ? `-c project=${projectID}` : undefined
     },
     pool: { 
         max: 20,         
         min: 5, 
-        // ⏳ TIEMPO DE ESPERA DE CONEXIÓN: 2 minutos (120,000 ms) para evitar caídas si hay muchos usuarios
+        // TIEMPO DE ESPERA DE CONEXIÓN: 2 minutos (120,000 ms) para evitar caídas si hay muchos usuarios
         acquire: 120000, 
         idle: 10000 
     }

@@ -7,8 +7,8 @@ import {
   FlaskConical, Stethoscope, Scissors, Activity, FileQuestion, 
   Loader2, Syringe, Bed, HeartPulse, FileText, ChevronRight, HelpCircle,
   UploadCloud, 
-  Pill, // 👈 Icono para medicamentos
-  HeartHandshake // 👈 Icono para apoyo/hogar de paso
+  Pill, // Icono para medicamentos
+  HeartHandshake // Icono para apoyo/hogar de paso
 } from "lucide-react";
 import api from "@/src/app/services/api"; 
 
@@ -22,8 +22,8 @@ const CATEGORIAS_VISUALES = [
   "Laboratorio", 
   "Clínica del Dolor", 
   "Estancia", 
-  "Medicamentos",       // 👈 Agregado para los fármacos
-  "Apoyo y Soporte",    // 👈 Agregado para Hogar de Paso / Alimentación
+  "Medicamentos", 
+  "Apoyo y Soporte",
   "Oncología",
   "Otros"
 ];
@@ -115,19 +115,18 @@ export default function ConfigCupsPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await api.post("/navegacion/cups/sync", {}, { timeout: 120000 }); 
-      if (res.data.success) {
-        alert(`Sincronización completa.`);
-        fetchCups();
+      const res = await api.post("/navegacion/cups/sync"); 
+            if (res.status === 202 || res.data.success) {
+        alert(`✅ ${res.data.message}\n\nPuedes seguir usando el sistema. Actualiza esta página en un par de minutos para ver los resultados.`);
       }
-    } catch (error) {
-      alert("Error sincronizando.");
+    } catch (error: any) {
+      alert("❌ Error sincronizando: " + (error.response?.data?.error || error.message));
     } finally {
       setSyncing(false);
     }
   };
 
-  // Maneja la subida del Excel de CUPS
+  // 🚀 MANEJO DE IMPORTACIÓN EN SEGUNDO PLANO
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -141,9 +140,9 @@ export default function ConfigCupsPage() {
               headers: { 'Content-Type': 'multipart/form-data' }
           });
           
-          if (res.data.success) {
-              alert(`✅ Éxito: ${res.data.message}`);
-              fetchCups(); // Recargamos la tabla
+          if (res.status === 202 || res.data.success) {
+              alert(`✅ El archivo fue recibido.\n\nEl sistema está procesando los códigos CUPS en segundo plano. Esto puede tomar unos minutos.\n\nPor favor, usa el botón "Sincronizar" más tarde para ver los cambios.`);
+              // Nota: Ya no llamamos a fetchCups() aquí porque los datos aún se están subiendo.
           }
       } catch (error: any) {
           alert("❌ Error al importar: " + (error.response?.data?.error || error.message));

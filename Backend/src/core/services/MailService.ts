@@ -9,7 +9,7 @@ export class MailService {
         }
     });
 
-    // 🚀 Ahora recibe la URL completa, ya armada dinámicamente por el Controller
+    // Ahora recibe la URL completa, ya armada dinámicamente por el Controller
     public static async sendPasswordResetEmail(to: string, resetUrl: string) {
         const mailOptions = {
             from: `"Soporte VidaNova" <${process.env.EMAIL_USER}>`,

@@ -13,7 +13,6 @@ router.post('/forgot-password', [
     body('documentNumber').notEmpty().withMessage('El documento es obligatorio')
 ], AuthController.forgotPassword);
 
-// 🚀 ¡NUEVO! Añadimos la ruta para cambiar la contraseña con el token
 router.post('/reset-password', [
     body('token').notEmpty().withMessage('El token es obligatorio'),
     body('newPassword').isLength({ min: 8 }).withMessage('Mínimo 8 caracteres')

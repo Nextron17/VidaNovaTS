@@ -35,5 +35,40 @@ const seedAdmin = async () => {
         process.exit(1);
     }
 };
-
 seedAdmin();
+
+
+const seedAtencion = async () => {
+    try {
+        console.log(colors.cyan('⏳ Conectando para crear navigator...'));
+        await sequelize.authenticate();
+
+        // Creamos el navegador
+        await User.create({
+            name: 'Julian Sam',
+            documentNumber: '1058548386',
+            password: 'NewEra277353', // Tu modelo lo encriptará automáticamente
+            role: 'NAVIGATOR',
+            email: 'felipesamboni17@gmail.com',
+            status: 'online', // El texto que espera el ENUM
+            isActive: true    // El estado de seguridad
+        } as any);
+
+        console.log(colors.green.bold('\n✅ USUARIO CREADO EXITOSAMENTE'));
+        console.log(colors.blue('🆔 Documento: 1058548386'));
+        console.log(colors.blue('🔑 Password:  NewEra277353'));
+        
+        process.exit(0);
+    } catch (error: any) {
+        console.error(colors.red('\n❌ Error al crear el usuario:'));
+        
+        if (error.errors && error.errors.length > 0) {
+            error.errors.forEach((e: any) => console.log(colors.grey(`- ${e.message}`)));
+        } else {
+            console.error(error.message);
+        }
+        
+        process.exit(1);
+    }
+};
+seedAtencion();

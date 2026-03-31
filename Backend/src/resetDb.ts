@@ -20,31 +20,34 @@ const resetDatabase = async () => {
     // Cuenta regresiva de seguridad
     await new Promise(resolve => setTimeout(resolve, 5000));
 
-    console.log('🔄 Iniciando borrado masivo...');
+    console.log('🔄 Iniciando borrado masivo y reinicio de IDs...');
     const t = await sequelize.transaction();
 
     try {
+        // Opciones destructivas para PostgreSQL (cascade = borra en cascada, restartIdentity = reinicia IDs a 1)
+        const wipeOptions = { truncate: true, cascade: true, restartIdentity: true, transaction: t };
+
         // 2. BORRAMOS EN ORDEN (De hijos a padres) para evitar errores de llaves foráneas
 
-        // A. Borramos Auditoría (Depende de Usuarios)
-        await AuditLog.destroy({ where: {}, truncate: true, cascade: true, transaction: t });
-        console.log('✅ Tabla AuditLogs (Auditoría) vaciada.');
+        // A. Borramos Auditoría (Depende de todo)
+        await AuditLog.destroy({ where: {}, ...wipeOptions });
+        console.log('✅ Tabla AuditLogs (Auditoría) vaciada e IDs reiniciados.');
 
-        // B. Borramos Seguimientos (Depende de Pacientes y Usuarios)
-        await FollowUp.destroy({ where: {}, truncate: true, cascade: true, transaction: t });
-        console.log('✅ Tabla FollowUps (Citas/Gestiones) vaciada.');
+        // B. Borramos Seguimientos (Depende de Pacientes, CUPS y Usuarios)
+        await FollowUp.destroy({ where: {}, ...wipeOptions });
+        console.log('✅ Tabla FollowUps (Citas/Gestiones) vaciada e IDs reiniciados.');
 
         // C. Borramos Pacientes
-        await Patient.destroy({ where: {}, truncate: true, cascade: true, transaction: t });
-        console.log('✅ Tabla Patients (Pacientes) vaciada.');
+        await Patient.destroy({ where: {}, ...wipeOptions });
+        console.log('✅ Tabla Patients (Pacientes) vaciada e IDs reiniciados.');
 
         // D. Borramos el Diccionario de CUPS (Independiente)
-        await MasterCUP.destroy({ where: {}, truncate: true, cascade: true, transaction: t });
-        console.log('✅ Tabla Master_Cups (Diccionario) vaciada.');
+        await MasterCUP.destroy({ where: {}, ...wipeOptions });
+        console.log('✅ Tabla Master_Cups (Diccionario) vaciada e IDs reiniciados.');
 
         // E. Borramos Usuarios al final (Tabla Padre principal)
-        await User.destroy({ where: {}, truncate: true, cascade: true, transaction: t });
-        console.log('✅ Tabla Users (Usuarios y Admins) vaciada.');
+        await User.destroy({ where: {}, ...wipeOptions });
+        console.log('✅ Tabla Users (Usuarios y Admins) vaciada e IDs reiniciados.');
 
         // 3. Confirmar cambios
         await t.commit();

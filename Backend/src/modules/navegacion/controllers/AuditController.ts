@@ -3,16 +3,13 @@ import { Patient } from '../models/Patient';
 import { FollowUp } from '../models/FollowUp';
 import { Op } from 'sequelize';
 import { sequelize } from '../../../core/config/db';
-
-// 🕵️ IMPORTAMOS LOS MODELOS NECESARIOS PARA EL RASTRO DE ACTIVIDAD
 import { AuditLog } from '../../../core/models/AuditLog';
 import { User } from '../../usuarios/models/User';
 
 export class AuditController {
 
-    // ==========================================
-    // 👁️ 1. OBTENER RASTRO DE USUARIOS (Monitor Admin)
-    // ==========================================
+    
+    // 1. OBTENER RASTRO DE USUARIOS (Monitor Admin)
     static getGlobalLogs = async (req: Request, res: Response) => {
         try {
             const { month, year, all } = req.query;
@@ -47,9 +44,9 @@ export class AuditController {
         }
     }
 
-    // ==========================================
-    // 📊 2. OBTENER ESTADÍSTICAS DE CALIDAD (Lectura)
-    // ==========================================
+    
+    // 2. OBTENER ESTADÍSTICAS DE CALIDAD (Lectura)
+    
     static getGeneralStats = async (req: Request, res: Response) => {
         const response = {
             stats: { total: 0, pacientes: 0, sin_eps: 0, sin_cups: 0, fechas_malas: 0 },
@@ -122,9 +119,9 @@ export class AuditController {
         }
     }
 
-    // ==========================================
-    // 🛠️ 3. CORREGIR FECHAS 
-    // ==========================================
+    
+    // 3. CORREGIR FECHAS 
+    
     static fixIncoherentDates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
@@ -150,16 +147,15 @@ export class AuditController {
         }
     }
 
-    // ==========================================
-    // 🧬 4. FUSIÓN DE DUPLICADOS 
-    // ==========================================
+    
+   // 4. FUSIÓN DE DUPLICADOS 
+    
     static mergeDuplicates = async (req: Request, res: Response) => {
-        const t = await sequelize.transaction();
         try {
             console.log("🧬 [MERGE] Iniciando fusión...");
             const tableName = FollowUp.getTableName();
 
-            // 1. Buscar grupos
+            // 1. Buscar grupos (SIN transacción global para no bloquear la tabla entera desde el inicio)
             const queryGroups = `
                 SELECT "patientId", "dateRequest", COUNT(*)::int as count
                 FROM ${tableName}
@@ -170,65 +166,83 @@ export class AuditController {
             `;
             
             const groups: any[] = await sequelize.query(queryGroups, { 
-                type: (sequelize as any).QueryTypes.SELECT,
-                transaction: t 
+                type: (sequelize as any).QueryTypes.SELECT 
             });
 
             let processedCount = 0;
 
-            // 2. Procesar cada grupo
+            // 2. Procesar cada grupo EN TRANSACCIONES INDEPENDIENTES
             for (const group of groups) {
-                const records = await FollowUp.findAll({
-                    where: {
-                        patientId: group.patientId,
-                        dateRequest: group.dateRequest
-                    },
-                    order: [['updatedAt', 'DESC']], // El primero es el MASTER 
-                    transaction: t
-                });
+                
+                // 🔥 Iniciar una transacción pequeña SOLO para este grupo
+                const t = await sequelize.transaction();
+                
+                try {
+                    const records = await FollowUp.findAll({
+                        where: {
+                            patientId: group.patientId,
+                            dateRequest: group.dateRequest
+                        },
+                        order: [['updatedAt', 'DESC']], // El primero es el MASTER 
+                        transaction: t,
+                        lock: t.LOCK.UPDATE // 🔥 Bloquea estas filas temporalmente para que CupsController no interfiera
+                    });
 
-                if (records.length < 2) continue;
-
-                const master = records[0];
-                const slaves = records.slice(1);
-                let hasChanges = false;
-                const oldObs: string[] = [];
-
-                for (const slave of slaves) {
-                    // Copiar datos faltantes al master
-                    if (!master.cups && slave.cups) { master.cups = slave.cups; hasChanges = true; }
-                    if (!master.serviceName && slave.serviceName) { master.serviceName = slave.serviceName; hasChanges = true; }
-                    
-                    // Guardar observación vieja
-                    if (slave.observation && slave.observation !== master.observation) {
-                        oldObs.push(`[${slave.id}]: ${slave.observation}`);
+                    if (records.length < 2) {
+                        await t.rollback();
+                        continue;
                     }
 
-                    await slave.destroy({ transaction: t });
-                }
+                    const master = records[0];
+                    const slaves = records.slice(1);
+                    let hasChanges = false;
+                    const oldObs: string[] = [];
 
-                if (oldObs.length > 0) {
-                    master.observation = `${master.observation || ''} | 📜 HISTORIAL: ${oldObs.join('; ')}`.trim();
-                    hasChanges = true;
-                }
+                    for (const slave of slaves) {
+                        // Copiar datos faltantes al master
+                        if (!master.cups && slave.cups) { master.cups = slave.cups; hasChanges = true; }
+                        if (!master.serviceName && slave.serviceName) { master.serviceName = slave.serviceName; hasChanges = true; }
+                        
+                        // Guardar observación vieja
+                        if (slave.observation && slave.observation !== master.observation) {
+                            oldObs.push(`[${slave.id}]: ${slave.observation}`);
+                        }
 
-                if (hasChanges) await master.save({ transaction: t });
-                processedCount += slaves.length;
+                        // Destruir el slave dentro de esta mini-transacción
+                        await slave.destroy({ transaction: t });
+                    }
+
+                    if (oldObs.length > 0) {
+                        master.observation = `${master.observation || ''} | 📜 HISTORIAL: ${oldObs.join('; ')}`.trim();
+                        hasChanges = true;
+                    }
+
+                    // Guardar master
+                    if (hasChanges) await master.save({ transaction: t });
+                    
+                    // 🔥 Cerrar la transacción y liberar los bloqueos inmediatamente
+                    await t.commit(); 
+                    processedCount += slaves.length;
+
+                } catch (groupError) {
+                    // Si un paciente falla (por ej. un deadlock raro), hacemos rollback SOLO de ese paciente
+                    // y el bucle continúa con el resto de pacientes sin romper el proceso entero.
+                    await t.rollback();
+                    console.warn(`⚠️ Error fusionando grupo (Patient: ${group.patientId}):`, groupError);
+                }
             }
 
-            await t.commit();
-            res.json({ success: true, message: `Se fusionaron ${processedCount} registros duplicados.` });
+            res.json({ success: true, message: `Se fusionaron exitosamente ${processedCount} registros duplicados.` });
 
         } catch (error) {
-            await t.rollback();
             console.error(error);
-            res.status(500).json({ success: false, error: "Error al fusionar duplicados." });
+            res.status(500).json({ success: false, error: "Error general al iniciar la fusión de duplicados." });
         }
     }
     
-    // ==========================================
-    // 🧹 5. LIMPIEZA DE DUPLICADOS
-    // ==========================================
+    
+    // 5. LIMPIEZA DE DUPLICADOS
+    
     static cleanDuplicates = async (req: Request, res: Response) => {
         const t = await sequelize.transaction();
         try {
@@ -253,4 +267,4 @@ export class AuditController {
             res.status(500).json({ success: false, error: "Error al limpiar duplicados." });
         }
     }
-}
+}   
